@@ -39,11 +39,10 @@ end
 
 -- ===== Tuning =====
 local DURATION           = 1.6
-local CAM_UP             = 14
-local CAM_START_BACK     = 20
-local CAM_END_BACK       = 15
-local CAM_START_SIDE     = 11
-local CAM_END_SIDE       = 6
+local CAM_TOP_HEIGHT     = 42
+local CAM_START_RADIUS   = 28
+local CAM_END_RADIUS     = 21
+local CAM_SIDE_RATIO     = 0.35
 local CAM_FOV            = 60
 local CAM_ORBIT_ANGLE    = math.rad(12)
 
@@ -77,7 +76,8 @@ local function safeResetCamera(crashPos, yaw)
         local orbitYaw = yaw - (CAM_ORBIT_ANGLE * 0.5)
         local fwd = fwdFromYaw(orbitYaw)
         local right = Vector3.new(fwd.Z, 0, -fwd.X)
-        local pos = crashPos - fwd*(CAM_START_BACK * 0.8) + right*(CAM_START_SIDE * 0.5) + Vector3.new(0, CAM_UP * 0.8, 0)
+        local lateral = CAM_END_RADIUS * CAM_SIDE_RATIO
+        local pos = crashPos - fwd*(CAM_END_RADIUS * 0.9) + right*lateral + Vector3.new(0, CAM_TOP_HEIGHT * 0.85, 0)
         camera.CameraType = Enum.CameraType.Scriptable
         camera.CFrame = CFrame.lookAt(pos, crashPos)
 end
@@ -235,11 +235,14 @@ local function playCinematic(crashPos, yaw)
         local endFwd = fwdFromYaw(endYaw)
         local endRight = Vector3.new(endFwd.Z, 0, -endFwd.X)
 
-        local startPos = crashPos - startFwd*CAM_START_BACK + startRight*CAM_START_SIDE + Vector3.new(0, CAM_UP, 0)
-        local endPos   = crashPos - endFwd*CAM_END_BACK + endRight*CAM_END_SIDE + Vector3.new(0, CAM_UP * 1.05, 0)
+        local startLateral = CAM_START_RADIUS * CAM_SIDE_RATIO
+        local endLateral = CAM_END_RADIUS * CAM_SIDE_RATIO
 
-        local startLook = crashPos + startFwd * 3 + Vector3.new(0, 1.5, 0)
-        local endLook = crashPos + endFwd * 2 + Vector3.new(0, 1.5, 0)
+        local startPos = crashPos - startFwd*CAM_START_RADIUS + startRight*startLateral + Vector3.new(0, CAM_TOP_HEIGHT, 0)
+        local endPos   = crashPos - endFwd*CAM_END_RADIUS + endRight*endLateral + Vector3.new(0, CAM_TOP_HEIGHT * 1.05, 0)
+
+        local startLook = crashPos + Vector3.new(0, 6, 0)
+        local endLook = crashPos + Vector3.new(0, 4, 0)
 
         local blur = Instance.new("BlurEffect"); blur.Size = 10; blur.Parent = camera
         local fovStart = camera.FieldOfView
