@@ -20,7 +20,7 @@ CAS:BindActionAtPriority("BlockJump", blockJump, false, 999999, Enum.KeyCode.Spa
 local running = false
 local steer, leftDown, rightDown = 0, false, false
 local useSnapTurns = false
-local SNAP_TURN_DEGREES = 90
+local SNAP_TURN_DEGREES = 45
 
 local steeringLabel
 
