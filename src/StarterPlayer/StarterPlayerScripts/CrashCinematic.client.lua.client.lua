@@ -81,8 +81,12 @@ local function safeResetCamera(crashPos, yaw)
         local right = Vector3.new(fwd.Z, 0, -fwd.X)
         local lateral = CAM_END_RADIUS * CAM_SIDE_RATIO
         local pos = crashPos - fwd*(CAM_END_RADIUS * 0.9) + right*lateral + Vector3.new(0, CAM_TOP_HEIGHT * 0.85, 0)
-        camera.CameraType = Enum.CameraType.Scriptable
-        camera.CFrame = CFrame.lookAt(pos, crashPos)
+        if CameraGuard:tryAcquire(GUARD_ID, "safeReset") then
+                camera.CameraType = Enum.CameraType.Scriptable
+                camera.CameraSubject = nil
+                camera.CFrame = CFrame.lookAt(pos, crashPos)
+                CameraGuard:release(GUARD_ID)
+        end
 end
 
 -- ===== Shatter (cycle, lokaal) =====
