@@ -7,6 +7,8 @@ local keys = {W=Enum.KeyCode.W,A=Enum.KeyCode.A,S=Enum.KeyCode.S,D=Enum.KeyCode.
 local down = {}
 local lastHumanoid
 local lastAutoRotate
+local lastRoot
+local currentYaw = 0
 
 local function restoreAutoRotate()
         if lastHumanoid and lastHumanoid.Parent then
@@ -16,6 +18,8 @@ local function restoreAutoRotate()
         end
         lastHumanoid = nil
         lastAutoRotate = nil
+        lastRoot = nil
+        currentYaw = 0
 end
 
 local function canControlHumanoid()
@@ -26,7 +30,17 @@ end
 UIS.InputBegan:Connect(function(i,g) if g then return end; for k,code in pairs(keys) do if i.KeyCode==code then down[k]=true end end end)
 UIS.InputEnded:Connect(function(i,g) if g then return end; for k,code in pairs(keys) do if i.KeyCode==code then down[k]=false end end end)
 
-RunService.RenderStepped:Connect(function()
+local function extractYaw(cf)
+        local _, y, _ = cf:ToOrientation()
+        return y
+end
+
+local function updateRootOrientation(root)
+        local pos = root.Position
+        root.CFrame = CFrame.new(pos) * CFrame.Angles(0, currentYaw, 0)
+end
+
+RunService.RenderStepped:Connect(function(dt)
         local controlling = canControlHumanoid()
         local char=plr.Character; local hum=char and char:FindFirstChildOfClass("Humanoid"); if not hum then
                 restoreAutoRotate()
@@ -47,45 +61,52 @@ RunService.RenderStepped:Connect(function()
                 hum.AutoRotate = false
         end
 
-        local cam = workspace.CurrentCamera; if not cam then return end
         local root = char:FindFirstChild("HumanoidRootPart")
 
-        local right = 0
-        if down.D then right += 1 end
-        if down.A then right -= 1 end
-
-        local forward = 0
-        if down.W then forward += 1 end
-        if down.S then forward -= 1 end
-
-        local camCF = cam.CFrame
-        local camForward = camCF.LookVector
-        camForward = Vector3.new(camForward.X, 0, camForward.Z)
-        if camForward.Magnitude < 1e-4 then
-                        camForward = Vector3.new(0, 0, -1)
+        if root then
+                if lastRoot ~= root then
+                        currentYaw = extractYaw(root.CFrame)
+                        lastRoot = root
+                end
         else
-                        camForward = camForward.Unit
+                lastRoot = nil
         end
 
-        if root and camForward.Magnitude > 0 then
-                local rootPos = root.Position
-                root.CFrame = CFrame.lookAt(rootPos, rootPos + camForward, Vector3.new(0, 1, 0))
-        end
+        local turnInput = 0
+        if down.D then turnInput += 1 end
+        if down.A then turnInput -= 1 end
 
-        local camRight = camCF.RightVector
-        camRight = Vector3.new(camRight.X, 0, camRight.Z)
-        if camRight.Magnitude < 1e-4 then
-                camRight = Vector3.new(camForward.Z, 0, -camForward.X)
-        else
-                camRight = camRight.Unit
-        end
+        local forwardInput = 0
+        if down.W then forwardInput += 1 end
+        if down.S then forwardInput -= 1 end
 
-        local moveDir = camForward * forward + camRight * right
-        if moveDir.Magnitude > 1 then
-                moveDir = moveDir.Unit
-        end
+        if root then
+                local turn = 0
+                if turnInput > 0 then turn -= 1 end
+                if turnInput < 0 then turn += 1 end
 
-        hum:Move(moveDir, false)
+                local TURN_SPEED = math.rad(180)
+                if turn ~= 0 then
+                        currentYaw += TURN_SPEED * dt * turn
+                        updateRootOrientation(root)
+                else
+                        -- keep the root aligned to stored yaw even when standing still
+                        updateRootOrientation(root)
+                end
+
+                local forwardVec = root.CFrame.LookVector
+                forwardVec = Vector3.new(forwardVec.X, 0, forwardVec.Z)
+                if forwardVec.Magnitude > 0 then
+                        forwardVec = forwardVec.Unit
+                end
+
+                local moveDir = forwardVec * forwardInput
+                if moveDir.Magnitude > 1 then
+                        moveDir = moveDir.Unit
+                end
+
+                hum:Move(moveDir, false)
+        end
 end)
 
 plr.CharacterRemoving:Connect(function()
