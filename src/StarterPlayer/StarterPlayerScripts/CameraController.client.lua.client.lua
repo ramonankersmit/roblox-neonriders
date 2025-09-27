@@ -178,8 +178,8 @@ local FPV_FOV, FPV_HEAD_BACK, FPV_AHEAD = 80, 0.12, 11
 local FPV_SEAT_Y, FPV_SEAT_Z            = 2.1, -0.10
 -- Interpolatiebuffer: dynamisch vertraagd zodat we jitter gladstrijken zonder
 -- de chase tientallen milliseconden achter het voertuig te laten slepen.
-local MIN_INTERP_DELAY = 1/240
-local MAX_INTERP_DELAY = 0.04 -- ~40 ms bovenlimiet
+local MIN_INTERP_DELAY = 1/960 -- ~1 ms om vibraties te dempen zonder zichtbaar spoor
+local MAX_INTERP_DELAY = 0.008 -- maximaal ~8 ms vertraging voorkomt ghosting
 
 -- ===== Helpers =====
 local function getCycle()
@@ -206,9 +206,12 @@ local lastCycle   = nil
 local clipArmed   = false
 local lastFrameDt = 1 / 60
 
+local clearPoseBuf
+
 resetSmoothing = function()
         clipArmed = false
         lastFrameDt = 1 / 60
+        if clearPoseBuf then clearPoseBuf() end
 end
 Players.LocalPlayer.CharacterAdded:Connect(resetSmoothing)
 RoundActiveVal:GetPropertyChangedSignal("Value"):Connect(resetSmoothing)
@@ -216,19 +219,37 @@ RoundActiveVal:GetPropertyChangedSignal("Value"):Connect(resetSmoothing)
 -- ===== Pose-interpolatiebuffer =====
 local poseBuf = {} -- { {t=clock, cf=CFrame}, ... }
 local ppConn  = nil
+local hbConn  = nil
 
-local function clearPoseBuf() poseBuf = {} end
+clearPoseBuf = function()
+	poseBuf = {}
+end
 
 local function recordPose(pp)
 	table.insert(poseBuf, { t = os.clock(), cf = pp.CFrame })
 	if #poseBuf > 6 then table.remove(poseBuf, 1) end
 end
 
+local function averageSampleSpacing()
+	if #poseBuf < 2 then
+		return lastFrameDt
+	end
+	local total = 0
+	for i = 2, #poseBuf do
+		total += poseBuf[i].t - poseBuf[i-1].t
+	end
+	return math.max(total / (#poseBuf - 1), MIN_INTERP_DELAY)
+end
+
 local function currentInterpDelay()
-        -- Gebruik ~2 frames history, maar knijp het venster zodat high-refresh
-        -- systemen geen zichtbaar trail-effect krijgen.
-        local dt = math.clamp(lastFrameDt, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
-        return math.clamp(dt * 2, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
+	if #poseBuf < 2 then
+		return MIN_INTERP_DELAY
+	end
+
+	local sampleLag = math.clamp(averageSampleSpacing() * 0.65, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
+	local renderLag = math.clamp(lastFrameDt * 0.65, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
+
+	return math.min(sampleLag, renderLag)
 end
 
 local function getSmoothedPPcf(pp)
@@ -246,11 +267,32 @@ end
 
 local function hookPoseSampling(cycle)
 	if ppConn then ppConn:Disconnect(); ppConn = nil end
+	if hbConn then hbConn:Disconnect(); hbConn = nil end
 	clearPoseBuf()
+
 	local pp = cycle and cycle.PrimaryPart
 	if not pp then return end
+
 	recordPose(pp) -- seed
 	ppConn = pp:GetPropertyChangedSignal("CFrame"):Connect(function()
+		recordPose(pp)
+	end)
+
+	local cycleRef = cycle
+	hbConn = RunService.Heartbeat:Connect(function()
+		if not cycleRef.Parent then
+			hbConn:Disconnect()
+			hbConn = nil
+			return
+		end
+
+		local currentPP = cycleRef.PrimaryPart
+		if currentPP ~= pp then
+			hbConn:Disconnect()
+			hbConn = nil
+			return
+		end
+
 		recordPose(pp)
 	end)
 end
