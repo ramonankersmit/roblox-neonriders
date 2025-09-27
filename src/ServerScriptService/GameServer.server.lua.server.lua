@@ -25,6 +25,7 @@ local SpawnFolder    = Workspace:WaitForChild("SpawnPoints")
 local TICK_DT         = 1/30
 local TURN_RATE       = math.rad(140)
 local TURN_THRESH     = 0.20
+local SNAP_TURN       = math.rad(45)
 
 local WALL_THICK      = 0.2
 local WALL_HEIGHT     = 10
@@ -61,6 +62,13 @@ end
 
 local function fwdFromYaw(yaw)
 	return (CFrame.Angles(0, yaw, 0)).LookVector
+end
+
+local function round(n)
+	if n >= 0 then
+		return math.floor(n + 0.5)
+	end
+	return math.ceil(n - 0.5)
 end
 
 local function orientSpawn(cframe)
@@ -276,7 +284,22 @@ end
 -- Input
 TurnEvent.OnServerEvent:Connect(function(plr, steer)
 	local c = cycles[plr]
-	if c and c.running then
+	if not (c and c.running) then return end
+
+	local steerType = typeof(steer)
+	if steerType == "table" then
+		local snap = steer.snap or steer.Snap
+		local dir = math.clamp(tonumber(snap) or 0, -1, 1)
+		if dir ~= 0 then
+			local yaw = c.yaw or 0
+			local base = round(yaw / SNAP_TURN) * SNAP_TURN
+			c.yaw = base - dir * SNAP_TURN
+			c.steer = 0
+			if c.model and c.model.PrimaryPart then
+				c.model:PivotTo(CFrame.new(c.pos) * CFrame.Angles(0, c.yaw, 0))
+			end
+		end
+	else
 		c.steer = math.clamp(tonumber(steer) or 0, -1, 1)
 	end
 end)
