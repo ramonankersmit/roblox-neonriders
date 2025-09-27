@@ -23,6 +23,39 @@ local useSnapTurns = false
 local SNAP_TURN_DEGREES = 45
 
 local steeringLabel
+local steerKeys = {
+	[Enum.KeyCode.A] = true,
+	[Enum.KeyCode.D] = true,
+	[Enum.KeyCode.Left] = true,
+	[Enum.KeyCode.Right] = true,
+}
+
+local function shouldLockSteering()
+	return running or (RoundActive.Value == true)
+end
+
+local function sinkSteeringInput(_, _, inputObject)
+	if not inputObject then
+		return Enum.ContextActionResult.Pass
+	end
+
+	if not steerKeys[inputObject.KeyCode] then
+		return Enum.ContextActionResult.Pass
+	end
+
+	if shouldLockSteering() then
+		return Enum.ContextActionResult.Sink
+	end
+
+	return Enum.ContextActionResult.Pass
+end
+
+CAS:BindActionAtPriority("LockCycleSteerKeys", sinkSteeringInput, false, 999999,
+	Enum.KeyCode.A,
+	Enum.KeyCode.D,
+	Enum.KeyCode.Left,
+	Enum.KeyCode.Right
+)
 
 local function getSteeringStatus()
 	if useSnapTurns then
