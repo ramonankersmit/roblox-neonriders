@@ -50,7 +50,7 @@ local cineActive       = false
 local pendingSnap      = nil -- {pos=Vector3, look=Vector3, fov=number}
 local snapDelayFrames  = 0   -- wacht x frames voor we de snap zetten (tegen dubbele writes)
 local controllerBound  = false
-local PRIORITY_FINAL   = Enum.RenderPriority.Camera.Value + 1
+local PRIORITY_FINAL   = Enum.RenderPriority.Last.Value
 local renderStep
 
 local function bindControllerLoop()
@@ -402,6 +402,13 @@ renderStep = function(dt)
 
         if not controllerEnabled then return end
         if cineActive then return end
+
+        if cam.CameraType ~= Enum.CameraType.Scriptable then
+                if CameraGuard:tryAcquire(GUARD_ID, "typeGuard") then
+                        cam.CameraType = Enum.CameraType.Scriptable
+                        CameraGuard:release(GUARD_ID)
+                end
+        end
 
         if pendingSnap then
                 if snapDelayFrames > 0 then
