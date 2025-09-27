@@ -24,5 +24,8 @@ end)
 
 -- iemand die CameraType wisselt?
 cam:GetPropertyChangedSignal("CameraType"):Connect(function()
-	warn("[CamDebug] CameraType changed to:", cam.CameraType)
+        warn("[CamDebug] CameraType changed to:", cam.CameraType)
+        if cam.CameraType == Enum.CameraType.Custom then
+                warn("[CamDebug] switched to Custom", debug.traceback())
+        end
 end)

@@ -50,7 +50,7 @@ local cineActive       = false
 local pendingSnap      = nil -- {pos=Vector3, look=Vector3, fov=number}
 local snapDelayFrames  = 0   -- wacht x frames voor we de snap zetten (tegen dubbele writes)
 local controllerBound  = false
-local PRIORITY_FINAL   = 10^9
+local PRIORITY_FINAL   = Enum.RenderPriority.Camera.Value + 1
 local renderStep
 
 local function bindControllerLoop()

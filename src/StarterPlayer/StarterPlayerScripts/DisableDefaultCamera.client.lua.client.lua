@@ -7,17 +7,39 @@ local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
 local GUARD_ID = "DisableDefaultCamera"
 
 local function disableDefaultControls()
-    local playerScripts = player:WaitForChild("PlayerScripts")
-    local okModule, playerModule = pcall(function()
-        return require(playerScripts:WaitForChild("PlayerModule"))
-    end)
-    if okModule and playerModule then
-        local okControls, controls = pcall(function()
+    local playerScripts = player:FindFirstChild("PlayerScripts") or player:WaitForChild("PlayerScripts", 5)
+    if not playerScripts then
+        warn("[DisableDefaultCamera] PlayerScripts not found; skipping controls disable")
+        return
+    end
+
+    local playerModuleScript = playerScripts:FindFirstChild("PlayerModule") or playerScripts:WaitForChild("PlayerModule", 5)
+    if not playerModuleScript then
+        warn("[DisableDefaultCamera] PlayerModule not found; skipping controls disable")
+        return
+    end
+
+    local okModule, playerModule = pcall(require, playerModuleScript)
+    if not okModule or not playerModule then
+        warn("[DisableDefaultCamera] Failed to require PlayerModule", okModule and "(nil)" or playerModule)
+        return
+    end
+
+    local okControls, controls = pcall(function()
+        if type(playerModule) == "table" and typeof(playerModule.GetControls) == "function" then
             return playerModule:GetControls()
-        end)
-        if okControls and controls then
-            controls:Disable()
         end
+    end)
+    if not okControls or not controls then
+        warn("[DisableDefaultCamera] PlayerModule:GetControls unavailable; default controls stay enabled")
+        return
+    end
+
+    local okDisable, err = pcall(function()
+        controls:Disable()
+    end)
+    if not okDisable then
+        warn("[DisableDefaultCamera] Controls:Disable failed", err)
     end
 end
 

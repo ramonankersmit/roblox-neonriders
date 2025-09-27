@@ -13,20 +13,16 @@ local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
 local GUARD_ID = "CameraLock"
 
 local KILL_NAMES = {
-	-- local “proxies” die eerder stotter/dubbel beeld gaven
-	["LocalRenderProxy"]   = true,
-	["LocalRenderProxy.client"] = true,
-	["LocalRiderProxy"]    = true,
-	["LocalRiderProxy.client"]  = true,
-	["PoseHandshake"]      = true,
-	["PoseHandshake.client"]= true,
-	-- loader die vaak default PlayerModule/CameraModule activeert
-	["PlayerScriptsLoader"] = true,
-	-- default PlayerModule die CameraModule levert
-	["PlayerModule"]        = true,
-	-- in sommige templates staat nog een Freecam ui/script in PlayerGui
-	["Freecam"]             = true,
-	["FreecamScript"]       = true,
+        -- local “proxies” die eerder stotter/dubbel beeld gaven
+        ["LocalRenderProxy"]   = true,
+        ["LocalRenderProxy.client"] = true,
+        ["LocalRiderProxy"]    = true,
+        ["LocalRiderProxy.client"]  = true,
+        ["PoseHandshake"]      = true,
+        ["PoseHandshake.client"]= true,
+        -- in sommige templates staat nog een Freecam ui/script in PlayerGui
+        ["Freecam"]             = true,
+        ["FreecamScript"]       = true,
 }
 
 local function isKillName(name)
@@ -64,14 +60,14 @@ task.defer(function()
 	-- Freecam & co in PlayerGui
 	scanAndPurge(pg, "PlayerGui initial")
 
-	-- Proxies/Loader/PlayerModule in PlayerScripts
-	scanAndPurge(ps, "PlayerScripts initial")
+        -- Proxies in PlayerScripts
+        scanAndPurge(ps, "PlayerScripts initial")
 
 	-- 2) Blijf waken: als er later iets bijkomt, direct weggooien
 	if ps then
 		ps.ChildAdded:Connect(function(ch)
-			if isKillName(ch.Name) then safeDestroy(ch, "PlayerScripts.ChildAdded") end
-			-- ook subchildren (soms spawnt PlayerModule CameraModule later)
+                        if isKillName(ch.Name) then safeDestroy(ch, "PlayerScripts.ChildAdded") end
+                        -- ook subchildren voor eventuele nested proxies
 			ch.DescendantAdded:Connect(function(d)
 				if isKillName(d.Name) then safeDestroy(d, "PlayerScripts.DescendantAdded") end
 			end)
