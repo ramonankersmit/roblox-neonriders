@@ -353,13 +353,22 @@ local function renderFPV(cycle)
 end
 
 local function renderLobby()
-	local char = player.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
-	local base = root.CFrame
-	local eye  = (base * CFrame.new(0, 8,  -12)).Position
-	local look = (base * CFrame.new(0, 2,    6)).Position
-	SetCam(CFrame.new(eye, look), 70, "lobby")
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+
+        local forward = root.CFrame.LookVector
+        forward = Vector3.new(forward.X, 0, forward.Z)
+        if forward.Magnitude < 1e-4 then
+                forward = Vector3.new(0, 0, -1)
+        else
+                forward = forward.Unit
+        end
+
+        local rootPos = root.Position
+        local eye = rootPos - forward * 14 + Vector3.new(0, 8, 0)
+        local look = rootPos + forward * 6 + Vector3.new(0, 2, 0)
+        SetCam(CFrame.new(eye, look), 70, "lobby")
 end
 
 -- ===== Render loop (single writer) =====

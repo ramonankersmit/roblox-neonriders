@@ -10,14 +10,38 @@ end
 
 -- Lobby boven de arena
 local lobbyY = 25
+local baseSize = Vector3.new(60 * 1.5, 1, 40 * 1.5)
 local base = part{
-	Name="LobbyFloor", Anchored=true, Size=Vector3.new(60,1,40),
-	Position=Vector3.new(0, lobbyY, -120), Material=Enum.Material.Metal, Color=Color3.fromRGB(35,35,50)
+        Name="LobbyFloor", Anchored=true, Size=baseSize,
+        Position=Vector3.new(0, lobbyY, -120), Material=Enum.Material.Metal, Color=Color3.fromRGB(35,35,50)
 }
 local spawn = Instance.new("SpawnLocation")
 spawn.Name="LobbySpawn"; spawn.Anchored=true; spawn.Size=Vector3.new(6,1,6)
 spawn.Position = base.Position + Vector3.new(0,1,0); spawn.Transparency=0.2
 spawn.Neutral=true; spawn.CanCollide=true; spawn.Parent=Workspace
+
+local wallHeight = 12
+local wallThickness = 1
+local halfX = base.Size.X * 0.5
+local halfZ = base.Size.Z * 0.5
+
+local function makeWall(name, size, position)
+        part{
+                Name = name,
+                Anchored = true,
+                Size = size,
+                Position = position,
+                Material = Enum.Material.Glass,
+                Transparency = 0.3,
+                Color = Color3.fromRGB(180, 220, 255),
+                CanCollide = true,
+        }
+end
+
+makeWall("LobbyWallNorth", Vector3.new(base.Size.X + wallThickness * 2, wallHeight, wallThickness), base.Position + Vector3.new(0, wallHeight * 0.5, -halfZ - wallThickness * 0.5))
+makeWall("LobbyWallSouth", Vector3.new(base.Size.X + wallThickness * 2, wallHeight, wallThickness), base.Position + Vector3.new(0, wallHeight * 0.5, halfZ + wallThickness * 0.5))
+makeWall("LobbyWallEast",  Vector3.new(wallThickness, wallHeight, base.Size.Z + wallThickness * 2), base.Position + Vector3.new(halfX + wallThickness * 0.5, wallHeight * 0.5, 0))
+makeWall("LobbyWallWest",  Vector3.new(wallThickness, wallHeight, base.Size.Z + wallThickness * 2), base.Position + Vector3.new(-halfX - wallThickness * 0.5, wallHeight * 0.5, 0))
 
 local function pillar(name, offset, text)
 	local p = part{
