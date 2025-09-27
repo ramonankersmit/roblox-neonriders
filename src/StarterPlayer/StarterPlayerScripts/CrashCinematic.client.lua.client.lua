@@ -13,6 +13,9 @@ local SoundService = game:GetService("SoundService")
 local plr = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
+local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
+local GUARD_ID = "CrashCinematic"
+
 local RoundActive = RS:WaitForChild("RoundActive")
 local activeCleanup = nil  -- zolang niet nil => cinematic actief
 
@@ -266,7 +269,12 @@ local function playCinematic(crashPos, yaw)
                 local eased = TweenService:GetValue(progress, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
                 local pos = startPos:Lerp(endPos, eased)
                 local lookAt = startLook:Lerp(endLook, eased)
-                camera.CFrame = CFrame.lookAt(pos, lookAt)
+                if CameraGuard:tryAcquire(GUARD_ID, "cinematic") then
+                        camera.CameraType = Enum.CameraType.Scriptable
+                        camera.CameraSubject = nil
+                        camera.CFrame = CFrame.lookAt(pos, lookAt)
+                        CameraGuard:release(GUARD_ID)
+                end
                 if progress >= 1 and cleanup then cleanup() end
         end)
         camConn = true
@@ -298,6 +306,7 @@ local function playCinematic(crashPos, yaw)
                 if camConn then
                         print("[CrashCinematic] Unbinding CrashCinematicCam renderstep")
                         RunService:UnbindFromRenderStep("CrashCinematicCam")
+                        CameraGuard:release(GUARD_ID)
                         camConn = nil
                 end
 

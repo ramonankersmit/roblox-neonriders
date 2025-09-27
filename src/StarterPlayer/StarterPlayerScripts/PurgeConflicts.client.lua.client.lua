@@ -9,6 +9,9 @@ local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 local cam = workspace.CurrentCamera
 
+local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
+local GUARD_ID = "CameraLock"
+
 local KILL_NAMES = {
 	-- local “proxies” die eerder stotter/dubbel beeld gaven
 	["LocalRenderProxy"]   = true,
@@ -92,26 +95,26 @@ task.defer(function()
 end)
 
 -- 3) Camera hard locken op Scriptable (voorkomt Custom push)
+local function forceScriptable(reason)
+        if CameraGuard:tryAcquire(GUARD_ID, reason) then
+                cam.CameraType = Enum.CameraType.Scriptable
+                cam.CameraSubject = nil
+                CameraGuard:release(GUARD_ID)
+        end
+end
+
 local camTypeConn
 camTypeConn = cam:GetPropertyChangedSignal("CameraType"):Connect(function()
-	if cam.CameraType ~= Enum.CameraType.Scriptable then
-		print(("[PurgeCam] Forcing CameraType back to Scriptable (was %s)"):format(tostring(cam.CameraType)))
-		cam.CameraType = Enum.CameraType.Scriptable
-	end
+        if cam.CameraType ~= Enum.CameraType.Scriptable then
+                print(("[PurgeCam] Forcing CameraType back to Scriptable (was %s)"):format(tostring(cam.CameraType)))
+                forceScriptable("camTypeChanged")
+        end
 end)
 
--- 4) Bij start: alvast netjes zetten
-cam.CameraType = Enum.CameraType.Scriptable
-cam.CameraSubject = nil
+forceScriptable("init")
 
--- 5) Extra failsafe: elke frame even checken of iemand anders schrijft
---    (NIET de camera verplaatsen; enkel type/subject bewaken)
 RunService.RenderStepped:Connect(function()
-	if cam.CameraType ~= Enum.CameraType.Scriptable then
-		cam.CameraType = Enum.CameraType.Scriptable
-	end
-	if cam.CameraSubject ~= nil then
-		-- wij sturen de camera zelf; geen subject
-		cam.CameraSubject = nil
-	end
+        if cam.CameraType ~= Enum.CameraType.Scriptable or cam.CameraSubject ~= nil then
+                forceScriptable("renderCheck")
+        end
 end)

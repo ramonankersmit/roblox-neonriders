@@ -1,8 +1,6 @@
--- CameraController.client.lua (full, CamGuard v3 + FRONT-CHASE test)
--- Eén camera-writer met lobby-view + FPV/chase en interpolatiebuffer.
--- CamGuard v3 reapply: als een ander script de camera overschrijft, zetten wij 'm
--- direct terug in hetzelfde frame (geen zichtbaar flikkeren).
--- Nieuw: front-chase testmodus (default AAN). Toets F wisselt front/back.
+-- CameraController.client.lua — centrale chasecamera met CameraGuard mutex.
+-- Houdt de camera exclusief vast zodat slechts één script per frame schrijft.
+-- Front/back chase wisselbaar met F, FPV met V.
 
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,10 +13,13 @@ local cam    = Workspace.CurrentCamera
 cam.CameraType    = Enum.CameraType.Scriptable
 cam.CameraSubject = nil
 
+local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
+local GUARD_ID = "CameraController"
+
 -- ===== Duplicate guard =====
 pcall(function() RunService:UnbindFromRenderStep("LightRaceCam") end)
 do
-	local token = cam:FindFirstChild("LightRaceCamActive")
+        local token = cam:FindFirstChild("LightRaceCamActive")
 	if token then
 		warn("[CameraController] duplicate instance; aborting")
 		return
@@ -27,55 +28,16 @@ do
 	end
 end
 
--- ===== CamGuard + Reapply (v3) =====
-local myWritesThisFrame = 0
-local reasonsThisFrame = {}
-
--- externe writes per frame (niet van onze SetCam)
-local extWritesThisFrame = 0
-local inSetCam = false
-
--- reapply-cache: onze laatst gewenste camera
-local lastDesiredCF  = nil
-local lastDesiredFOV = nil
-
--- budget om in hetzelfde frame terug te zetten (tegen externe writers)
-local reapplyBudgetThisFrame = 0
-
--- optioneel: quota voor stacktraces (zet >0 voor speurwerk)
-local traceQuota = 0
-
-cam:GetPropertyChangedSignal("CFrame"):Connect(function()
-	if not inSetCam then
-		extWritesThisFrame += 1
-		-- direct terugzetten binnen hetzelfde frame (als we een gewenst CF hebben)
-		if lastDesiredCF and reapplyBudgetThisFrame > 0 then
-			inSetCam = true
-			if lastDesiredFOV then cam.FieldOfView = lastDesiredFOV end
-			cam.CFrame = lastDesiredCF
-			inSetCam = false
-			reapplyBudgetThisFrame -= 1
-		end
-		if traceQuota > 0 then
-			warn("[CamGuard] External camera write — stack:\n" .. debug.traceback())
-			traceQuota -= 1
-		end
-	end
-end)
-
 local function SetCam(cf, fov, reason)
-	lastDesiredCF  = cf
-	lastDesiredFOV = fov
-	if fov then cam.FieldOfView = fov end
-	inSetCam = true
-	cam.CFrame = cf
-	inSetCam = false
-	myWritesThisFrame += 1
-	reasonsThisFrame[#reasonsThisFrame+1] = reason or "unknown"
-	if myWritesThisFrame > 1 then
-		warn(("[CamGuard] Controller wrote %d times this frame; reasons=%s")
-			:format(myWritesThisFrame, table.concat(reasonsThisFrame, ",")))
-	end
+        if not CameraGuard:tryAcquire(GUARD_ID, reason) then
+                return false
+        end
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CameraSubject = nil
+        if fov then cam.FieldOfView = fov end
+        cam.CFrame = cf
+        CameraGuard:release(GUARD_ID)
+        return true
 end
 
 -- ===== Bus / cinematic handshake =====
@@ -110,10 +72,6 @@ CamEvt.Event:Connect(function(payload)
         if payload.type == "start" then
                 unbindControllerLoop()
                 cineActive = true
-                -- laat de cinematic vrij schrijven zonder dat CamGuard het direct terugzet
-                lastDesiredCF = nil
-                lastDesiredFOV = nil
-                reapplyBudgetThisFrame = 0
         elseif payload.type == "stop" then
                 cineActive = false
                 -- seed voor eerste chase-frame na cinematic
@@ -440,69 +398,44 @@ end
 
 -- ===== Render loop (single writer) =====
 renderStep = function(dt)
-        -- CamGuard per-frame reset
-        myWritesThisFrame = 0
-        reasonsThisFrame = {}
-        reapplyBudgetThisFrame = 2
         lastFrameDt = dt or lastFrameDt
 
-	if not controllerEnabled then return end
-	if cineActive then return end
+        if not controllerEnabled then return end
+        if cineActive then return end
 
-	-- Eénmalige snap na cinematic stop (met frame-delay)
-	if pendingSnap then
-		if snapDelayFrames > 0 then
-			snapDelayFrames -= 1
-			return
-		end
-		SetCam(CFrame.new(pendingSnap.pos, pendingSnap.look), pendingSnap.fov or CHASE_FOV, "snap")
-		resetSmoothing()
-		pendingSnap = nil
-		return
-	end
-
-	-- Lobby
-	local function inLobby() return not RoundActiveVal.Value end
-	if inLobby() then
-		renderLobby()
-		if extWritesThisFrame > 0 then
-			warn(("[CamGuard] External write(s) this frame: %d ; mine=%d (cine=%s lobby=%s snap=%s)")
-				:format(extWritesThisFrame, myWritesThisFrame, tostring(cineActive), tostring(inLobby()), tostring(pendingSnap~=nil)))
-		end
-		extWritesThisFrame = 0
-		return
-	end
-
-	-- Game
-	local cycle = getCycle()
-	if not cycle or not cycle.PrimaryPart then
-		if extWritesThisFrame > 0 then
-			warn(("[CamGuard] External write(s) this frame: %d ; mine=%d (cine=%s lobby=%s snap=%s)")
-				:format(extWritesThisFrame, myWritesThisFrame, tostring(cineActive), tostring(inLobby()), tostring(pendingSnap~=nil)))
-		end
-		extWritesThisFrame = 0
-		return
-	end
-
-	-- nieuwe/respawned cycle → smoothing + sampling resetten
-	if cycle ~= lastCycle then
-		lastCycle = cycle
-		resetSmoothing()
-		hookPoseSampling(cycle)
-	end
-
-	if (forceFPV or useCockpitManual) then
-		renderFPV(cycle)
-	else
-		renderChase(cycle)
-	end
-
-	-- CamGuard rapportage
-	if extWritesThisFrame > 0 then
-		warn(("[CamGuard] External write(s) this frame: %d ; mine=%d (cine=%s lobby=%s snap=%s)")
-			:format(extWritesThisFrame, myWritesThisFrame, tostring(cineActive), tostring(not RoundActiveVal.Value), tostring(pendingSnap~=nil)))
+        if pendingSnap then
+                if snapDelayFrames > 0 then
+                        snapDelayFrames -= 1
+                        return
+                end
+                if SetCam(CFrame.new(pendingSnap.pos, pendingSnap.look), pendingSnap.fov or CHASE_FOV, "snap") then
+                        resetSmoothing()
+                        pendingSnap = nil
+                end
+                return
         end
-        extWritesThisFrame = 0
+
+        if not RoundActiveVal.Value then
+                renderLobby()
+                return
+        end
+
+        local cycle = getCycle()
+        if not cycle or not cycle.PrimaryPart then
+                return
+        end
+
+        if cycle ~= lastCycle then
+                lastCycle = cycle
+                resetSmoothing()
+                hookPoseSampling(cycle)
+        end
+
+        if (forceFPV or useCockpitManual) then
+                renderFPV(cycle)
+        else
+                renderChase(cycle)
+        end
 end
 
 bindControllerLoop()

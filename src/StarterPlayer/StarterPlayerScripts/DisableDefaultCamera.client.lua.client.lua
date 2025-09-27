@@ -3,6 +3,9 @@ local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
 local cam     = workspace.CurrentCamera
 
+local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
+local GUARD_ID = "DisableDefaultCamera"
+
 local BAD = { PlayerModule=true, PlayerScriptsLoader=true }
 
 local function nuke(child)
@@ -43,16 +46,22 @@ player.CharacterAdded:Connect(function()
 	task.delay(2, purge)
 end)
 
--- Camera Scriptable houden (zonder ‘flipflop’)
 local locking = false
 cam:GetPropertyChangedSignal("CameraType"):Connect(function()
-	if locking then return end
-	if cam.CameraType ~= Enum.CameraType.Scriptable then
-		locking = true
-		cam.CameraType = Enum.CameraType.Scriptable
-		cam.CameraSubject = nil
-		locking = false
-	end
+        if locking then return end
+        if cam.CameraType ~= Enum.CameraType.Scriptable then
+                if CameraGuard:tryAcquire(GUARD_ID, "camTypeChanged") then
+                        locking = true
+                        cam.CameraType = Enum.CameraType.Scriptable
+                        cam.CameraSubject = nil
+                        locking = false
+                        CameraGuard:release(GUARD_ID)
+                end
+        end
 end)
-cam.CameraType   = Enum.CameraType.Scriptable
-cam.CameraSubject = nil
+
+if CameraGuard:tryAcquire(GUARD_ID, "init") then
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CameraSubject = nil
+        CameraGuard:release(GUARD_ID)
+end
