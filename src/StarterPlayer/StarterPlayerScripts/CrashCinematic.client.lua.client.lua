@@ -39,10 +39,13 @@ end
 
 -- ===== Tuning =====
 local DURATION           = 1.6
-local CAM_UP             = 12
-local CAM_BACK           = 14
-local CAM_SIDE           = 8
-local CAM_FOV            = 62
+local CAM_UP             = 14
+local CAM_START_BACK     = 20
+local CAM_END_BACK       = 15
+local CAM_START_SIDE     = 11
+local CAM_END_SIDE       = 6
+local CAM_FOV            = 60
+local CAM_ORBIT_ANGLE    = math.rad(12)
 
 local SLOWMO_TIME_SCALE  = 0.35
 local SLOWMO_GRAVITY     = 0.35
@@ -71,10 +74,12 @@ local function applySlowMoToPart(part)
         if av then part.AssemblyAngularVelocity = av * SLOWMO_TIME_SCALE end
 end
 local function safeResetCamera(crashPos, yaw)
-	local fwd = fwdFromYaw(yaw)
-	local pos = crashPos - fwd*16 + Vector3.new(0, 10, 0) + Vector3.new(6, 0, 0)
-	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = CFrame.new(pos, crashPos + fwd*8)
+        local orbitYaw = yaw - (CAM_ORBIT_ANGLE * 0.5)
+        local fwd = fwdFromYaw(orbitYaw)
+        local right = Vector3.new(fwd.Z, 0, -fwd.X)
+        local pos = crashPos - fwd*(CAM_START_BACK * 0.8) + right*(CAM_START_SIDE * 0.5) + Vector3.new(0, CAM_UP * 0.8, 0)
+        camera.CameraType = Enum.CameraType.Scriptable
+        camera.CFrame = CFrame.lookAt(pos, crashPos)
 end
 
 -- ===== Shatter (cycle, lokaal) =====
@@ -222,10 +227,19 @@ local function playCinematic(crashPos, yaw)
 		end
 	end
 
-	local fwd = fwdFromYaw(yaw)
-	local right = Vector3.new(fwd.Z, 0, -fwd.X)
-	local startPos = crashPos - fwd*CAM_BACK + right*CAM_SIDE + Vector3.new(0, CAM_UP, 0)
-	local endPos   = crashPos - fwd*(CAM_BACK*0.6) + right*(CAM_SIDE*0.4) + Vector3.new(0, CAM_UP*1.1, 0)
+        local startYaw = yaw - CAM_ORBIT_ANGLE
+        local endYaw = yaw + CAM_ORBIT_ANGLE
+
+        local startFwd = fwdFromYaw(startYaw)
+        local startRight = Vector3.new(startFwd.Z, 0, -startFwd.X)
+        local endFwd = fwdFromYaw(endYaw)
+        local endRight = Vector3.new(endFwd.Z, 0, -endFwd.X)
+
+        local startPos = crashPos - startFwd*CAM_START_BACK + startRight*CAM_START_SIDE + Vector3.new(0, CAM_UP, 0)
+        local endPos   = crashPos - endFwd*CAM_END_BACK + endRight*CAM_END_SIDE + Vector3.new(0, CAM_UP * 1.05, 0)
+
+        local startLook = crashPos + startFwd * 3 + Vector3.new(0, 1.5, 0)
+        local endLook = crashPos + endFwd * 2 + Vector3.new(0, 1.5, 0)
 
         local blur = Instance.new("BlurEffect"); blur.Size = 10; blur.Parent = camera
         local fovStart = camera.FieldOfView
@@ -243,7 +257,8 @@ local function playCinematic(crashPos, yaw)
                 progress = math.clamp(progress + (scaledDt / DURATION), 0, 1)
                 local eased = TweenService:GetValue(progress, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
                 local pos = startPos:Lerp(endPos, eased)
-                camera.CFrame = CFrame.new(pos, crashPos)
+                local lookAt = startLook:Lerp(endLook, eased)
+                camera.CFrame = CFrame.lookAt(pos, lookAt)
                 if progress >= 1 and cleanup then cleanup() end
         end)
 
