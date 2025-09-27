@@ -97,8 +97,62 @@ RunService.RenderStepped:Connect(function()
         end
 end)
 
--- === Countdown HUD ===
-local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.Name = "HUD"; gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+
+local function listScreenGuiNames(pg)
+        local names = {}
+        for _, child in ipairs(pg:GetChildren()) do
+                if child:IsA("ScreenGui") then
+                        table.insert(names, child.Name)
+                end
+        end
+        table.sort(names)
+        return names
+end
+
+local function findHudContainer(pg)
+        return pg:FindFirstChild("SpeedHUD")
+                or pg:FindFirstChild("DistanceHUD")
+                or pg:FindFirstChild("HUD")
+end
+
+local function ensureHudContainer(pg)
+        local gui = findHudContainer(pg)
+        if gui then
+                return gui
+        end
+
+        local existingNames = listScreenGuiNames(pg)
+        if #existingNames > 0 then
+                print("[ClientControls] Skipping HUD mount until PlayerGui is clear; existing:", table.concat(existingNames, ", "))
+                local start = os.clock()
+                while #existingNames > 0 do
+                        if os.clock() - start > 8 then break end
+                        task.wait(0.1)
+                        gui = findHudContainer(pg)
+                        if gui then return gui end
+                        existingNames = listScreenGuiNames(pg)
+                end
+        end
+
+        gui = findHudContainer(pg)
+        if gui then
+                return gui
+        end
+
+        print("[ClientControls] PlayerGui clear; creating HUD container")
+        gui = Instance.new("ScreenGui")
+        gui.Name = "HUD"
+        gui.ResetOnSpawn = false
+        gui.Parent = pg
+        return gui
+end
+
+local gui = ensureHudContainer(playerGui)
+if not gui then
+        warn("[ClientControls] No HUD container available; countdown label disabled")
+        return
+end
 local label = Instance.new("TextLabel")
 label.Size = UDim2.fromScale(0.3, 0.2); label.Position = UDim2.fromScale(0.35, 0.3)
 label.BackgroundTransparency = 1; label.TextScaled = true; label.Font = Enum.Font.GothamBold
