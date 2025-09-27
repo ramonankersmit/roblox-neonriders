@@ -1,15 +1,10 @@
 -- PurgeConflicts.client.lua
--- Verwijdert alle bekende "tweede camera-writers" en houdt de camera hard op Scriptable.
+-- Verwijdert alle bekende "tweede camera-writers" en ruimt conflicterende UI op.
 -- Zet dit in StarterPlayer > StarterPlayerScripts.
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local cam = workspace.CurrentCamera
-
-local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
-local GUARD_ID = "CameraLock"
 
 local KILL_NAMES = {
         -- local “proxies” die eerder stotter/dubbel beeld gaven
@@ -72,27 +67,6 @@ task.defer(function()
         end
 end)
 
--- 3) Camera hard locken op Scriptable (voorkomt Custom push)
-local function forceScriptable(reason)
-        if CameraGuard:tryAcquire(GUARD_ID, reason) then
-                cam.CameraType = Enum.CameraType.Scriptable
-                cam.CameraSubject = nil
-                CameraGuard:release(GUARD_ID)
-        end
-end
-
-local camTypeConn
-camTypeConn = cam:GetPropertyChangedSignal("CameraType"):Connect(function()
-        if cam.CameraType ~= Enum.CameraType.Scriptable then
-                print(("[PurgeCam] Forcing CameraType back to Scriptable (was %s)"):format(tostring(cam.CameraType)))
-                forceScriptable("camTypeChanged")
-        end
-end)
-
-forceScriptable("init")
-
-RunService.RenderStepped:Connect(function()
-        if cam.CameraType ~= Enum.CameraType.Scriptable or cam.CameraSubject ~= nil then
-                forceScriptable("renderCheck")
-        end
-end)
+-- CameraScript neemt de camera volledig over, dus we hoeven hier niet langer
+-- de CurrentCamera te forceren. Het enige wat we doen is de bekende
+-- proxy/freecam UI's opruimen zodra ze verschijnen.
