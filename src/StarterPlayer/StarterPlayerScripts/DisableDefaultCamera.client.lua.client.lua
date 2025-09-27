@@ -1,69 +1,56 @@
--- DisableDefaultCamera.client.lua — disable Roblox default camera controls and enforce Scriptable lock
+-- DisableDefaultCamera.client.lua
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local cam = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
 
-local CameraGuard = require(script.Parent:WaitForChild("CameraGuard"))
-local GUARD_ID = "DisableDefaultCamera"
+local lp = Players.LocalPlayer
+local ps = lp:WaitForChild("PlayerScripts")
 
-local function disableDefaultControls()
-    local playerScripts = player:FindFirstChild("PlayerScripts") or player:WaitForChild("PlayerScripts", 5)
-    if not playerScripts then
-        warn("[DisableDefaultCamera] PlayerScripts not found; skipping controls disable")
-        return
-    end
+-- Wacht robuust op PlayerModule (max ~3s), dan disable controls.
+local function getPlayerModule(timeout)
+    -- eerst snelle lookup
+    local pm = ps:FindFirstChild("PlayerModule")
+    if pm then return pm end
 
-    local playerModuleScript = playerScripts:FindFirstChild("PlayerModule") or playerScripts:WaitForChild("PlayerModule", 5)
-    if not playerModuleScript then
-        warn("[DisableDefaultCamera] PlayerModule not found; skipping controls disable")
-        return
-    end
+    -- probeer een beperkte WaitForChild (geen infinite yield)
+    pm = ps:WaitForChild("PlayerModule", timeout or 3)
+    if pm then return pm end
 
-    local okModule, playerModule = pcall(require, playerModuleScript)
-    if not okModule or not playerModule then
-        warn("[DisableDefaultCamera] Failed to require PlayerModule", okModule and "(nil)" or playerModule)
-        return
-    end
-
-    local okControls, controls = pcall(function()
-        if type(playerModule) == "table" and typeof(playerModule.GetControls) == "function" then
-            return playerModule:GetControls()
+    -- als hij er nog niet is: luister kort op nieuwe children (race-free)
+    local found
+    local conn
+    conn = ps.ChildAdded:Connect(function(child)
+        if child.Name == "PlayerModule" then
+            found = child
         end
     end)
-    if not okControls or not controls then
-        warn("[DisableDefaultCamera] PlayerModule:GetControls unavailable; default controls stay enabled")
-        return
-    end
 
-    local okDisable, err = pcall(function()
-        controls:Disable()
-    end)
-    if not okDisable then
-        warn("[DisableDefaultCamera] Controls:Disable failed", err)
-    end
+    -- wacht tot het eind van de frame of 2 seconden, wat eerst komt
+    local t0 = os.clock()
+    repeat
+        RunService.Heartbeat:Wait()
+        if found then break end
+    until (os.clock() - t0) > 2
+
+    if conn then conn:Disconnect() end
+    return found
 end
 
-disableDefaultControls()
-player.CharacterAdded:Connect(function()
-    task.defer(disableDefaultControls)
-end)
+local pm = getPlayerModule(3)
+if not pm then
+    warn("[DisableDefaultCamera] PlayerModule not found; default controls stay enabled")
+    return
+end
 
-local locking = false
-cam:GetPropertyChangedSignal("CameraType"):Connect(function()
-    if locking then return end
-    if cam.CameraType ~= Enum.CameraType.Scriptable then
-        if CameraGuard:tryAcquire(GUARD_ID, "camTypeChanged") then
-            locking = true
-            cam.CameraType = Enum.CameraType.Scriptable
-            cam.CameraSubject = nil
-            locking = false
-            CameraGuard:release(GUARD_ID)
-        end
-    end
-end)
+local ok, playerModule = pcall(require, pm)
+if not ok or type(playerModule) ~= "table" or type(playerModule.GetControls) ~= "function" then
+    warn("[DisableDefaultCamera] PlayerModule:GetControls unavailable; default controls stay enabled")
+    return
+end
 
-if CameraGuard:tryAcquire(GUARD_ID, "init") then
-    cam.CameraType = Enum.CameraType.Scriptable
-    cam.CameraSubject = nil
-    CameraGuard:release(GUARD_ID)
+local ok2, controls = pcall(function() return playerModule:GetControls() end)
+if ok2 and controls and type(controls.Disable) == "function" then
+    controls:Disable()  -- officiële, ondersteunde manier (i.p.v. modules verwijderen)
+    print("[DisableDefaultCamera] Default controls disabled")
+else
+    warn("[DisableDefaultCamera] Controls module missing; default controls stay enabled")
 end
