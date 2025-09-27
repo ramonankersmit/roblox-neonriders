@@ -208,6 +208,14 @@ local lastFrameDt           = 1 / 60
 
 local function smoothAlphaForDt(dt)
         dt = dt or lastFrameDt
+        -- Roblox kan op hoge refresh rates (144 Hz, 240 Hz) hele kleine dt's doorgeven.
+        -- Bij de tijdconstante-conversie levert dat extreem lage alpha's op waardoor
+        -- je tijdens racen een "ghost"-beeld krijgt. Clamp de dt daarom naar minstens
+        -- 60 FPS zodat snelle systemen niet té veel smoothing meekrijgen, terwijl
+        -- we bij lagere framerates wél sneller inhalen.
+        if dt < (1 / 60) then
+                dt = 1 / 60
+        end
         if dt <= 0 then
                 return 1
         end
