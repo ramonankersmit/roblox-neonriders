@@ -172,13 +172,15 @@ local CHASE_LOOK_AHEAD, CHASE_FOV       = 14, 70
 local FRONT_AHEAD, FRONT_SIDE, FRONT_UP = 11.0, 0.0, 9.0
 -- Je kunt FRONT_SIDE bv. 1.5 zetten voor een schuin-front effect
 
-local SMOOTH_ALPHA_60FPS                = 0.15
+local SMOOTH_ALPHA_60FPS                = 0.6
 local ANTICLIP_PUSH                     = 0.6
 -- FPV
 local FPV_FOV, FPV_HEAD_BACK, FPV_AHEAD = 80, 0.12, 11
 local FPV_SEAT_Y, FPV_SEAT_Z            = 2.1, -0.10
--- Interpolatiebuffer
-local INTERP_DELAY = 1/30  -- ~33ms
+-- Interpolatiebuffer: dynamisch vertraagd zodat we jitter gladstrijken zonder
+-- de chase tientallen milliseconden achter het voertuig te laten slepen.
+local MIN_INTERP_DELAY = 1/240
+local MAX_INTERP_DELAY = 0.04 -- ~40 ms bovenlimiet
 
 -- ===== Helpers =====
 local function getCycle()
@@ -208,24 +210,16 @@ local lastFrameDt           = 1 / 60
 
 local function smoothAlphaForDt(dt)
         dt = dt or lastFrameDt
-        -- Roblox kan op hoge refresh rates (144 Hz, 240 Hz) hele kleine dt's doorgeven.
-        -- Bij de tijdconstante-conversie levert dat extreem lage alpha's op waardoor
-        -- je tijdens racen een "ghost"-beeld krijgt. Clamp de dt daarom naar minstens
-        -- 60 FPS zodat snelle systemen niet té veel smoothing meekrijgen, terwijl
-        -- we bij lagere framerates wél sneller inhalen.
-        if dt < (1 / 60) then
-                dt = 1 / 60
-        end
         if dt <= 0 then
                 return 1
         end
 
-        -- Converteer een vaste alpha bij 60 FPS naar een tijdconstante zodat het
-        -- smoothing-gevoel gelijk blijft ongeacht de framerate. Dit voorkomt dat
-        -- we bij lagere FPS een lange ghost-trail zien.
+        -- Converteer de gewenste 60 FPS alpha naar een tijdconstante en gebruik
+        -- die rechtstreeks. Zo blijft de filterrespons gelijk bij elke refresh,
+        -- maar kunnen hoge framerates toch een grotere alpha krijgen.
         local base = math.clamp(1 - SMOOTH_ALPHA_60FPS, 1e-4, 0.9999)
         local decay = -math.log(base) * 60
-        return math.clamp(1 - math.exp(-decay * dt), 0, 1)
+        return math.clamp(1 - math.exp(-decay * math.min(dt, 1/15)), 0, 1)
 end
 
 resetSmoothing = function()
@@ -247,9 +241,16 @@ local function recordPose(pp)
 	if #poseBuf > 6 then table.remove(poseBuf, 1) end
 end
 
+local function currentInterpDelay()
+        -- Gebruik ~2 frames history, maar knijp het venster zodat high-refresh
+        -- systemen geen zichtbaar trail-effect krijgen.
+        local dt = math.clamp(lastFrameDt, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
+        return math.clamp(dt * 2, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
+end
+
 local function getSmoothedPPcf(pp)
-	if #poseBuf < 2 then return pp.CFrame end
-	local target = os.clock() - INTERP_DELAY
+        if #poseBuf < 2 then return pp.CFrame end
+        local target = os.clock() - currentInterpDelay()
 	for i = #poseBuf-1, 1, -1 do
 		local a, b = poseBuf[i], poseBuf[i+1]
 		if a.t <= target and target <= b.t and b.t > a.t then
