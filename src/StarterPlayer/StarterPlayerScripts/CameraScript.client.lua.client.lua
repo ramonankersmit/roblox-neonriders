@@ -404,10 +404,7 @@ renderStep = function(dt)
         if cineActive then return end
 
         if cam.CameraType ~= Enum.CameraType.Scriptable then
-                if CameraGuard:tryAcquire(GUARD_ID, "typeGuard") then
-                        cam.CameraType = Enum.CameraType.Scriptable
-                        CameraGuard:release(GUARD_ID)
-                end
+                cam.CameraType = Enum.CameraType.Scriptable
         end
 
         if pendingSnap then
