@@ -8,10 +8,16 @@ local plr = Players.LocalPlayer
 
 local TIERS = {60, 80, 110}  -- toonwaarden; server valideert
 
--- Minimalistische HUD
-local gui = Instance.new("ScreenGui")
-gui.Name = "SpeedHUD"; gui.ResetOnSpawn = false
-gui.Parent = plr:WaitForChild("PlayerGui")
+-- Minimalistische HUD (gebruik de ScreenGui waarin dit script al zit)
+local gui = script.Parent :: ScreenGui
+gui.ResetOnSpawn = false
+
+-- schoonmaken (laat alleen dit script staan)
+for _, child in ipairs(gui:GetChildren()) do
+        if child ~= script then
+                child:Destroy()
+        end
+end
 
 local frame = Instance.new("Frame"); frame.Parent = gui
 frame.AnchorPoint = Vector2.new(1,1)
