@@ -172,7 +172,7 @@ local CHASE_LOOK_AHEAD, CHASE_FOV       = 14, 70
 local FRONT_AHEAD, FRONT_SIDE, FRONT_UP = 11.0, 0.0, 9.0
 -- Je kunt FRONT_SIDE bv. 1.5 zetten voor een schuin-front effect
 
-local SMOOTH_ALPHA                      = 0.15
+local SMOOTH_ALPHA_60FPS                = 0.15
 local ANTICLIP_PUSH                     = 0.6
 -- FPV
 local FPV_FOV, FPV_HEAD_BACK, FPV_AHEAD = 80, 0.12, 11
@@ -204,10 +204,26 @@ end
 local smoothPos, smoothLook = nil, nil
 local lastCycle             = nil
 local clipArmed             = false
+local lastFrameDt           = 1 / 60
+
+local function smoothAlphaForDt(dt)
+        dt = dt or lastFrameDt
+        if dt <= 0 then
+                return 1
+        end
+
+        -- Converteer een vaste alpha bij 60 FPS naar een tijdconstante zodat het
+        -- smoothing-gevoel gelijk blijft ongeacht de framerate. Dit voorkomt dat
+        -- we bij lagere FPS een lange ghost-trail zien.
+        local base = math.clamp(1 - SMOOTH_ALPHA_60FPS, 1e-4, 0.9999)
+        local decay = -math.log(base) * 60
+        return math.clamp(1 - math.exp(-decay * dt), 0, 1)
+end
 
 resetSmoothing = function()
         smoothPos, smoothLook = nil, nil
         clipArmed = false
+        lastFrameDt = 1 / 60
 end
 Players.LocalPlayer.CharacterAdded:Connect(resetSmoothing)
 RoundActiveVal:GetPropertyChangedSignal("Value"):Connect(resetSmoothing)
@@ -315,22 +331,23 @@ end
 
 -- ===== Renderers =====
 local function renderChase(cycle)
-	local pp = cycle.PrimaryPart; if not pp then return end
-	local baseCF = getSmoothedPPcf(pp)
-	local wantPos, wantLook
+        local pp = cycle.PrimaryPart; if not pp then return end
+        local baseCF = getSmoothedPPcf(pp)
+        local wantPos, wantLook
 	if frontChase then
 		wantPos, wantLook = computeChaseFront(baseCF, cycle)
 	else
 		wantPos, wantLook = computeChaseBack(baseCF, cycle)
 	end
 
-	if not smoothPos then
-		smoothPos, smoothLook = wantPos, wantLook
-	else
-		smoothPos  = smoothPos:Lerp(wantPos,  SMOOTH_ALPHA)
-		smoothLook = smoothLook:Lerp(wantLook, SMOOTH_ALPHA)
-	end
-	SetCam(CFrame.new(smoothPos, smoothLook), CHASE_FOV, frontChase and "chase_front" or "chase_back")
+        if not smoothPos then
+                smoothPos, smoothLook = wantPos, wantLook
+        else
+                local alpha = smoothAlphaForDt(lastFrameDt)
+                smoothPos  = smoothPos:Lerp(wantPos,  alpha)
+                smoothLook = smoothLook:Lerp(wantLook, alpha)
+        end
+        SetCam(CFrame.new(smoothPos, smoothLook), CHASE_FOV, frontChase and "chase_front" or "chase_back")
 end
 
 local function renderFPV(cycle)
@@ -377,11 +394,12 @@ end
 
 -- ===== Render loop (single writer) =====
 local PRIORITY_FINAL = 10^9
-RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, function()
-	-- CamGuard per-frame reset
-	myWritesThisFrame = 0
-	reasonsThisFrame = {}
-	reapplyBudgetThisFrame = 2
+RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, function(dt)
+        -- CamGuard per-frame reset
+        myWritesThisFrame = 0
+        reasonsThisFrame = {}
+        reapplyBudgetThisFrame = 2
+        lastFrameDt = dt or lastFrameDt
 
 	if not controllerEnabled then return end
 	if cineActive then return end
