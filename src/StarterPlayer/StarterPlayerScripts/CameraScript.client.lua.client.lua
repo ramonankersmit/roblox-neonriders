@@ -153,16 +153,11 @@ local ANTICLIP_PUSH                     = 0.6
 -- FPV
 local FPV_FOV, FPV_HEAD_BACK, FPV_AHEAD = 80, 0.12, 11
 local FPV_SEAT_Y, FPV_SEAT_Z            = 2.1, -0.10
--- Interpolatiebuffer: dynamisch vertraagd zodat we jitter gladstrijken zonder
--- de chase tientallen milliseconden achter het voertuig te laten slepen.
-local MIN_INTERP_DELAY = 1/960 -- ~1 ms om vibraties te dempen zonder zichtbaar spoor
-local MAX_INTERP_DELAY = 0.008 -- maximaal ~8 ms vertraging voorkomt ghosting
-
 -- ===== Helpers =====
 local function getCycle()
-	for _,m in ipairs(Workspace:GetChildren()) do
-		if m:IsA("Model") and m.Name == (player.Name .. "_Cycle") then
-			return m
+        for _,m in ipairs(Workspace:GetChildren()) do
+                if m:IsA("Model") and m.Name == (player.Name .. "_Cycle") then
+                        return m
 		end
 	end
 end
@@ -181,98 +176,12 @@ end
 -- ===== State =====
 local lastCycle   = nil
 local clipArmed   = false
-local lastFrameDt = 1 / 60
-
-local clearPoseBuf
 
 resetSmoothing = function()
         clipArmed = false
-        lastFrameDt = 1 / 60
-        if clearPoseBuf then clearPoseBuf() end
 end
 Players.LocalPlayer.CharacterAdded:Connect(resetSmoothing)
 RoundActiveVal:GetPropertyChangedSignal("Value"):Connect(resetSmoothing)
-
--- ===== Pose-interpolatiebuffer =====
-local poseBuf = {} -- { {t=clock, cf=CFrame}, ... }
-local ppConn  = nil
-local hbConn  = nil
-
-clearPoseBuf = function()
-	poseBuf = {}
-end
-
-local function recordPose(pp)
-	table.insert(poseBuf, { t = os.clock(), cf = pp.CFrame })
-	if #poseBuf > 6 then table.remove(poseBuf, 1) end
-end
-
-local function averageSampleSpacing()
-	if #poseBuf < 2 then
-		return lastFrameDt
-	end
-	local total = 0
-	for i = 2, #poseBuf do
-		total += poseBuf[i].t - poseBuf[i-1].t
-	end
-	return math.max(total / (#poseBuf - 1), MIN_INTERP_DELAY)
-end
-
-local function currentInterpDelay()
-	if #poseBuf < 2 then
-		return MIN_INTERP_DELAY
-	end
-
-	local sampleLag = math.clamp(averageSampleSpacing() * 0.65, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
-	local renderLag = math.clamp(lastFrameDt * 0.65, MIN_INTERP_DELAY, MAX_INTERP_DELAY)
-
-	return math.min(sampleLag, renderLag)
-end
-
-local function getSmoothedPPcf(pp)
-        if #poseBuf < 2 then return pp.CFrame end
-        local target = os.clock() - currentInterpDelay()
-	for i = #poseBuf-1, 1, -1 do
-		local a, b = poseBuf[i], poseBuf[i+1]
-		if a.t <= target and target <= b.t and b.t > a.t then
-			local alpha = (target - a.t) / (b.t - a.t)
-			return a.cf:Lerp(b.cf, alpha)
-		end
-	end
-	return poseBuf[#poseBuf].cf
-end
-
-local function hookPoseSampling(cycle)
-	if ppConn then ppConn:Disconnect(); ppConn = nil end
-	if hbConn then hbConn:Disconnect(); hbConn = nil end
-	clearPoseBuf()
-
-	local pp = cycle and cycle.PrimaryPart
-	if not pp then return end
-
-	recordPose(pp) -- seed
-	ppConn = pp:GetPropertyChangedSignal("CFrame"):Connect(function()
-		recordPose(pp)
-	end)
-
-	local cycleRef = cycle
-	hbConn = RunService.Heartbeat:Connect(function()
-		if not cycleRef.Parent then
-			hbConn:Disconnect()
-			hbConn = nil
-			return
-		end
-
-		local currentPP = cycleRef.PrimaryPart
-		if currentPP ~= pp then
-			hbConn:Disconnect()
-			hbConn = nil
-			return
-		end
-
-		recordPose(pp)
-	end)
-end
 
 -- ===== Chase compute (back & front) =====
 local function computeChaseBack(baseCF, cycle)
@@ -343,7 +252,7 @@ end
 -- ===== Renderers =====
 local function renderChase(cycle)
         local pp = cycle.PrimaryPart; if not pp then return end
-        local baseCF = getSmoothedPPcf(pp)
+        local baseCF = pp.CFrame
         local wantPos, wantLook
 	if frontChase then
 		wantPos, wantLook = computeChaseFront(baseCF, cycle)
@@ -356,18 +265,19 @@ end
 
 local function renderFPV(cycle)
 	local char = player.Character
-	local head = char and char:FindFirstChild("Head")
-	local eye, ahead
+        local head = char and char:FindFirstChild("Head")
+        local eye, ahead
 
-	if head and head:IsA("BasePart") then
-		local headCF = head.CFrame
-		eye   = (headCF * CFrame.new(0, 0, FPV_HEAD_BACK)).Position
-		ahead = eye + headCF.LookVector * FPV_AHEAD
-	else
-		local baseCF = getSmoothedPPcf(cycle.PrimaryPart)
-		eye   = (baseCF * CFrame.new(0, FPV_SEAT_Y, FPV_SEAT_Z)).Position
-		ahead = eye + baseCF.LookVector * FPV_AHEAD
-	end
+        if head and head:IsA("BasePart") then
+                local headCF = head.CFrame
+                eye   = (headCF * CFrame.new(0, 0, FPV_HEAD_BACK)).Position
+                ahead = eye + headCF.LookVector * FPV_AHEAD
+        else
+                local pp = cycle.PrimaryPart
+                local baseCF = pp and pp.CFrame or CFrame.new()
+                eye   = (baseCF * CFrame.new(0, FPV_SEAT_Y, FPV_SEAT_Z)).Position
+                ahead = eye + baseCF.LookVector * FPV_AHEAD
+        end
 
 	-- mini anti-clip vlak voor de cam
 	local hit = raycast_exclude(eye, eye + (ahead - eye).Unit * 0.7, {cycle, char})
@@ -397,9 +307,7 @@ local function renderLobby()
 end
 
 -- ===== Render loop (single writer) =====
-renderStep = function(dt)
-        lastFrameDt = dt or lastFrameDt
-
+renderStep = function(_dt)
         if not controllerEnabled then return end
         if cineActive then return end
 
@@ -432,7 +340,6 @@ renderStep = function(dt)
         if cycle ~= lastCycle then
                 lastCycle = cycle
                 resetSmoothing()
-                hookPoseSampling(cycle)
         end
 
         if (forceFPV or useCockpitManual) then
