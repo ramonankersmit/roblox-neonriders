@@ -42,8 +42,16 @@ RunService.RenderStepped:Connect(function()
 	if running then TurnEvent:FireServer(steer) end
 end)
 
--- === Countdown HUD ===
-local gui = Instance.new("ScreenGui"); gui.ResetOnSpawn = false; gui.Name = "HUD"; gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
+local gui = playerGui:FindFirstChild("SpeedHUD")
+        or playerGui:FindFirstChild("DistanceHUD")
+        or playerGui:FindFirstChild("HUD")
+if not gui then
+        gui = Instance.new("ScreenGui")
+        gui.Name = "HUD"
+        gui.ResetOnSpawn = false
+        gui.Parent = playerGui
+end
 local label = Instance.new("TextLabel")
 label.Size = UDim2.fromScale(0.3, 0.2); label.Position = UDim2.fromScale(0.35, 0.3)
 label.BackgroundTransparency = 1; label.TextScaled = true; label.Font = Enum.Font.GothamBold
