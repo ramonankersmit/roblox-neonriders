@@ -8,6 +8,7 @@ local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
 local PhysicsService = game:GetService("PhysicsService")
+local SoundService = game:GetService("SoundService")
 
 local plr = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
@@ -43,6 +44,11 @@ local CAM_BACK           = 14
 local CAM_SIDE           = 8
 local CAM_FOV            = 62
 
+local SLOWMO_TIME_SCALE  = 0.35
+local SLOWMO_GRAVITY     = 0.35
+local SLOWMO_AUDIO_OCT   = 0.55
+local SLOWMO_TRANSITION  = 0.25
+
 local SHATTER_FORCE      = 120
 local SHATTER_SPIN       = 50
 
@@ -54,8 +60,15 @@ local RAGDOLL_PHYS       = PhysicalProperties.new(1.0, 0.6, 0.35, 1, 1)
 -- ===== Utils =====
 local function fwdFromYaw(yaw) return (CFrame.Angles(0, yaw, 0)).LookVector end
 local function randUnit()
-	local x,y,z = math.random()-0.5, math.random()-0.5, math.random()-0.5
-	local v = Vector3.new(x,y,z); return (v.Magnitude > 0) and v.Unit or Vector3.new(0,1,0)
+        local x,y,z = math.random()-0.5, math.random()-0.5, math.random()-0.5
+        local v = Vector3.new(x,y,z); return (v.Magnitude > 0) and v.Unit or Vector3.new(0,1,0)
+end
+local function applySlowMoToPart(part)
+        if not part then return end
+        local lv = part.AssemblyLinearVelocity
+        local av = part.AssemblyAngularVelocity
+        if lv then part.AssemblyLinearVelocity = lv * SLOWMO_TIME_SCALE end
+        if av then part.AssemblyAngularVelocity = av * SLOWMO_TIME_SCALE end
 end
 local function safeResetCamera(crashPos, yaw)
 	local fwd = fwdFromYaw(yaw)
@@ -92,8 +105,9 @@ local function spawnCycleShatter(cycleModel, crashPos)
 		if p and p:IsA("BasePart") then
 			local dir = (p.Position - crashPos); dir = (dir.Magnitude < 0.1) and randUnit() or dir.Unit
 			local mass = (p.AssemblyMass and p.AssemblyMass > 0) and p.AssemblyMass or 1
-			p:ApplyImpulse((dir + Vector3.new(0,0.4,0) + 0.25*randUnit()) * SHATTER_FORCE * mass)
-			p:ApplyAngularImpulse(randUnit() * SHATTER_SPIN * mass)
+                        p:ApplyImpulse((dir + Vector3.new(0,0.4,0) + 0.25*randUnit()) * SHATTER_FORCE * mass * SLOWMO_TIME_SCALE)
+                        p:ApplyAngularImpulse(randUnit() * SHATTER_SPIN * mass * SLOWMO_TIME_SCALE)
+                        applySlowMoToPart(p)
 			table.insert(parts, p)
 		end
 	end
@@ -167,10 +181,11 @@ local function spawnLocalRagdoll(character, crashPos)
 			local dir = (p.Position - crashPos)
 			dir = (dir.Magnitude < 0.1) and Vector3.new(0,1,0) or dir.Unit
 			local mass = (p.AssemblyMass and p.AssemblyMass > 0) and p.AssemblyMass or 1
-			p:ApplyImpulse((dir + Vector3.new(0,0.7,0)) * SHATTER_FORCE * 0.6 * mass)
-			p:ApplyAngularImpulse(Vector3.new(
-				(math.random()-0.5)*2, (math.random()-0.5)*2, (math.random()-0.5)*2
-				).Unit * (SHATTER_SPIN * 0.6) * mass)
+                        p:ApplyImpulse((dir + Vector3.new(0,0.7,0)) * SHATTER_FORCE * 0.6 * mass * SLOWMO_TIME_SCALE)
+                        p:ApplyAngularImpulse(Vector3.new(
+                                (math.random()-0.5)*2, (math.random()-0.5)*2, (math.random()-0.5)*2
+                                ).Unit * (SHATTER_SPIN * 0.6) * mass * SLOWMO_TIME_SCALE)
+                        applySlowMoToPart(p)
 
 			table.insert(parts, p)
 		end
@@ -212,37 +227,67 @@ local function playCinematic(crashPos, yaw)
 	local startPos = crashPos - fwd*CAM_BACK + right*CAM_SIDE + Vector3.new(0, CAM_UP, 0)
 	local endPos   = crashPos - fwd*(CAM_BACK*0.6) + right*(CAM_SIDE*0.4) + Vector3.new(0, CAM_UP*1.1, 0)
 
-	local blur = Instance.new("BlurEffect"); blur.Size = 8; blur.Parent = camera
-	local fovStart = camera.FieldOfView
-	TweenService:Create(camera, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {FieldOfView = CAM_FOV}):Play()
+        local blur = Instance.new("BlurEffect"); blur.Size = 10; blur.Parent = camera
+        local fovStart = camera.FieldOfView
+        TweenService:Create(camera, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {FieldOfView = CAM_FOV}):Play()
 
-	local tValue = Instance.new("NumberValue"); tValue.Value = 0
-	local camConn
-	camConn = RunService:BindToRenderStep("CrashCinematicCam", Enum.RenderPriority.Camera.Value + 2, function()
-		local t = tValue.Value
-		local pos = startPos:Lerp(endPos, t)
-		camera.CFrame = CFrame.new(pos, crashPos)
-	end)
+        local timeScale = math.clamp(SLOWMO_TIME_SCALE, 0.05, 1)
+        local totalDuration = DURATION / timeScale
+        local progress = 0
 
-	local tween = TweenService:Create(tValue, TweenInfo.new(DURATION, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Value = 1})
+        local camConn
+        local cleaned = false
+        local cleanup -- forward declare
+        camConn = RunService:BindToRenderStep("CrashCinematicCam", Enum.RenderPriority.Camera.Value + 2, function(dt)
+                local scaledDt = math.clamp(dt, 0, 0.1) * timeScale
+                progress = math.clamp(progress + (scaledDt / DURATION), 0, 1)
+                local eased = TweenService:GetValue(progress, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                local pos = startPos:Lerp(endPos, eased)
+                camera.CFrame = CFrame.new(pos, crashPos)
+                if progress >= 1 and cleanup then cleanup() end
+        end)
 
-	local cleaned = false
-	local function cleanup()
-		if cleaned then return end
-		cleaned = true
-		if DEBUG then warn("[Cine] stop") end
+        local originalGravity = Workspace.Gravity
+        local gravityTweenIn
+        local targetGravity = math.clamp(originalGravity * SLOWMO_GRAVITY, 0, originalGravity)
+        if originalGravity > 0 and targetGravity > 0 and math.abs(targetGravity - originalGravity) > 0.5 then
+                gravityTweenIn = TweenService:Create(Workspace, TweenInfo.new(SLOWMO_TRANSITION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Gravity = targetGravity})
+                gravityTweenIn:Play()
+        end
 
-		-- stop onze renderloop
-		if camConn then RunService:UnbindFromRenderStep("CrashCinematicCam"); camConn = nil end
+        local slowMoPitch = Instance.new("PitchShiftSoundEffect")
+        slowMoPitch.Name = "CrashCinematicSlowMo"
+        slowMoPitch.Octave = 1
+        slowMoPitch.Parent = SoundService
+        TweenService:Create(slowMoPitch, TweenInfo.new(SLOWMO_TRANSITION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Octave = math.clamp(SLOWMO_AUDIO_OCT, 0.05, 1)}):Play()
 
-		-- effectjes weg, FOV terug
-		if blur then blur:Destroy() end
-		camera.FieldOfView = fovStart
+        cleanup = function()
+                if cleaned then return end
+                cleaned = true
+                if DEBUG then warn("[Cine] stop") end
 
-		-- maak local character weer zichtbaar (LTM terug)
-		local nowChar = Players.LocalPlayer.Character
-		if nowChar then
-			for _,bp in ipairs(nowChar:GetDescendants()) do
+                -- stop onze renderloop
+                if camConn then RunService:UnbindFromRenderStep("CrashCinematicCam"); camConn = nil end
+
+                -- effectjes weg, FOV terug
+                if blur then blur:Destroy() end
+                camera.FieldOfView = fovStart
+
+                if slowMoPitch then
+                        TweenService:Create(slowMoPitch, TweenInfo.new(SLOWMO_TRANSITION, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Octave = 1}):Play()
+                        Debris:AddItem(slowMoPitch, SLOWMO_TRANSITION + 0.1)
+                        slowMoPitch = nil
+                end
+
+                if gravityTweenIn then gravityTweenIn:Cancel() end
+                if originalGravity then
+                        TweenService:Create(Workspace, TweenInfo.new(SLOWMO_TRANSITION, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Gravity = originalGravity}):Play()
+                end
+
+                -- maak local character weer zichtbaar (LTM terug)
+                local nowChar = Players.LocalPlayer.Character
+                if nowChar then
+                        for _,bp in ipairs(nowChar:GetDescendants()) do
 				if bp:IsA("BasePart") then bp.LocalTransparencyModifier = 0 end
 			end
 		end
@@ -253,14 +298,12 @@ local function playCinematic(crashPos, yaw)
 			CamEvt:Fire({type="stop", pos=crashPos, yaw=yaw})
 		end)
 
-		activeCleanup = nil
-	end
-	activeCleanup = cleanup
-	
-	tween.Completed:Connect(function() cleanup() end)
-	tween:Play()
-	task.delay(DURATION + 0.1, cleanup)   -- timeout 1
-	task.delay(DURATION + 0.7, cleanup)   -- timeout 2
+                activeCleanup = nil
+        end
+        activeCleanup = cleanup
+
+        task.delay(totalDuration + 0.1, cleanup)   -- timeout 1
+        task.delay(totalDuration + 0.7, cleanup)   -- timeout 2
 end
 
 RoundActive:GetPropertyChangedSignal("Value"):Connect(function()
