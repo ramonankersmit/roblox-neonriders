@@ -90,8 +90,12 @@ local snapDelayFrames  = 0   -- wacht x frames voor we de snap zetten (tegen dub
 
 CamEvt.Event:Connect(function(payload)
 	if not payload or not payload.type then return end
-	if payload.type == "start" then
-		cineActive = true
+        if payload.type == "start" then
+                cineActive = true
+                -- laat de cinematic vrij schrijven zonder dat CamGuard het direct terugzet
+                lastDesiredCF = nil
+                lastDesiredFOV = nil
+                reapplyBudgetThisFrame = 0
 	elseif payload.type == "stop" then
 		cineActive = false
 		-- seed voor eerste chase-frame na cinematic
