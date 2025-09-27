@@ -25,7 +25,7 @@ local SpawnFolder    = Workspace:WaitForChild("SpawnPoints")
 local TICK_DT         = 1/30
 local TURN_RATE       = math.rad(140)
 local TURN_THRESH     = 0.20
-local SNAP_TURN       = math.rad(90)
+local SNAP_TURN       = math.rad(45)
 
 local WALL_THICK      = 0.2
 local WALL_HEIGHT     = 10
@@ -293,7 +293,7 @@ TurnEvent.OnServerEvent:Connect(function(plr, steer)
 		if dir ~= 0 then
 			local yaw = c.yaw or 0
 			local base = round(yaw / SNAP_TURN) * SNAP_TURN
-			c.yaw = base + dir * SNAP_TURN
+			c.yaw = base - dir * SNAP_TURN
 			c.steer = 0
 			if c.model and c.model.PrimaryPart then
 				c.model:PivotTo(CFrame.new(c.pos) * CFrame.Angles(0, c.yaw, 0))
