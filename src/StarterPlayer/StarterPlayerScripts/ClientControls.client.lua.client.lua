@@ -19,6 +19,7 @@ CAS:BindActionAtPriority("BlockJump", blockJump, false, 999999, Enum.KeyCode.Spa
 -- === Besturing ===
 local running = false
 local steer, leftDown, rightDown = 0, false, false
+local useSnapTurns = false
 local function setSteer()
 	if leftDown and not rightDown then steer = -1
 	elseif rightDown and not leftDown then steer = 1
@@ -26,20 +27,56 @@ local function setSteer()
 end
 
 UIS.InputBegan:Connect(function(i,gp)
-	if gp or not running then return end
-	if i.KeyCode == Enum.KeyCode.A or i.KeyCode == Enum.KeyCode.Left  then leftDown = true end
-	if i.KeyCode == Enum.KeyCode.D or i.KeyCode == Enum.KeyCode.Right then rightDown = true end
-	setSteer()
+        if gp then return end
+
+        if i.KeyCode == Enum.KeyCode.T then
+                useSnapTurns = not useSnapTurns
+                leftDown, rightDown = false, false
+                steer = 0
+
+                if not useSnapTurns then
+                        if UIS:IsKeyDown(Enum.KeyCode.A) or UIS:IsKeyDown(Enum.KeyCode.Left) then
+                                leftDown = true
+                        end
+                        if UIS:IsKeyDown(Enum.KeyCode.D) or UIS:IsKeyDown(Enum.KeyCode.Right) then
+                                rightDown = true
+                        end
+                        setSteer()
+                end
+
+                if running then
+                        TurnEvent:FireServer(0)
+                end
+                return
+        end
+
+        if not running then return end
+
+        if useSnapTurns then
+                if i.KeyCode == Enum.KeyCode.A or i.KeyCode == Enum.KeyCode.Left then
+                        TurnEvent:FireServer({ snap = -1 })
+                elseif i.KeyCode == Enum.KeyCode.D or i.KeyCode == Enum.KeyCode.Right then
+                        TurnEvent:FireServer({ snap = 1 })
+                end
+                return
+        end
+
+        if i.KeyCode == Enum.KeyCode.A or i.KeyCode == Enum.KeyCode.Left  then leftDown = true end
+        if i.KeyCode == Enum.KeyCode.D or i.KeyCode == Enum.KeyCode.Right then rightDown = true end
+        setSteer()
 end)
 UIS.InputEnded:Connect(function(i,gp)
-	if gp or not running then return end
-	if i.KeyCode == Enum.KeyCode.A or i.KeyCode == Enum.KeyCode.Left  then leftDown = false end
-	if i.KeyCode == Enum.KeyCode.D or i.KeyCode == Enum.KeyCode.Right then rightDown = false end
-	setSteer()
+        if gp or not running then return end
+        if useSnapTurns then return end
+        if i.KeyCode == Enum.KeyCode.A or i.KeyCode == Enum.KeyCode.Left  then leftDown = false end
+        if i.KeyCode == Enum.KeyCode.D or i.KeyCode == Enum.KeyCode.Right then rightDown = false end
+        setSteer()
 end)
 
 RunService.RenderStepped:Connect(function()
-	if running then TurnEvent:FireServer(steer) end
+        if running and not useSnapTurns then
+                TurnEvent:FireServer(steer)
+        end
 end)
 
 -- === Countdown HUD ===
