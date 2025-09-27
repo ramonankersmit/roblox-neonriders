@@ -212,8 +212,12 @@ end
 
 -- ===== Cinematic =====
 local function playCinematic(crashPos, yaw)
-	if DEBUG then warn("[Cine] start", crashPos) end
-	CamEvt:Fire({type="start", pos=crashPos, yaw=yaw})
+        if activeCleanup then
+                activeCleanup(true)
+        end
+
+        if DEBUG then warn("[Cine] start", crashPos) end
+        CamEvt:Fire({type="start", pos=crashPos, yaw=yaw})
 
 	-- verberg live character lokaal
 	local char = Players.LocalPlayer.Character
@@ -255,7 +259,7 @@ local function playCinematic(crashPos, yaw)
         local camConn
         local cleaned = false
         local cleanup -- forward declare
-        camConn = RunService:BindToRenderStep("CrashCinematicCam", Enum.RenderPriority.Camera.Value + 2, function(dt)
+        RunService:BindToRenderStep("CrashCinematicCam", Enum.RenderPriority.Camera.Value + 2, function(dt)
                 local scaledDt = math.clamp(dt, 0, 0.1) * timeScale
                 progress = math.clamp(progress + (scaledDt / DURATION), 0, 1)
                 local eased = TweenService:GetValue(progress, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
@@ -264,6 +268,7 @@ local function playCinematic(crashPos, yaw)
                 camera.CFrame = CFrame.lookAt(pos, lookAt)
                 if progress >= 1 and cleanup then cleanup() end
         end)
+        camConn = true
 
         local originalGravity = Workspace.Gravity
         local gravityTweenIn
@@ -279,7 +284,11 @@ local function playCinematic(crashPos, yaw)
         slowMoPitch.Parent = SoundService
         TweenService:Create(slowMoPitch, TweenInfo.new(SLOWMO_TRANSITION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Octave = math.clamp(SLOWMO_AUDIO_OCT, 0.05, 1)}):Play()
 
-        cleanup = function()
+        local function fireStop()
+                CamEvt:Fire({type="stop", pos=crashPos, yaw=yaw})
+        end
+
+        local function cleanup(skipStopDelay)
                 if cleaned then return end
                 cleaned = true
                 if DEBUG then warn("[Cine] stop") end
@@ -310,11 +319,15 @@ local function playCinematic(crashPos, yaw)
 			end
 		end
 
-		-- 1 frame later pas de stop naar de controller → één schrijver per frame
-		task.spawn(function()
-			RunService.RenderStepped:Wait()
-			CamEvt:Fire({type="stop", pos=crashPos, yaw=yaw})
-		end)
+                if skipStopDelay then
+                        fireStop()
+                else
+                        -- 1 frame later pas de stop naar de controller → één schrijver per frame
+                        task.spawn(function()
+                                RunService.RenderStepped:Wait()
+                                fireStop()
+                        end)
+                end
 
                 activeCleanup = nil
         end

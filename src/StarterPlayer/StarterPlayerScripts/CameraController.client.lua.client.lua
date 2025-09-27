@@ -87,22 +87,38 @@ CamEvt.Name  = "CamCinematic"; CamEvt.Parent = bus
 local cineActive       = false
 local pendingSnap      = nil -- {pos=Vector3, look=Vector3, fov=number}
 local snapDelayFrames  = 0   -- wacht x frames voor we de snap zetten (tegen dubbele writes)
+local controllerBound  = false
+local PRIORITY_FINAL   = 10^9
+local renderStep
+
+local function bindControllerLoop()
+        if controllerBound or not renderStep then return end
+        RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, renderStep)
+        controllerBound = true
+end
+
+local function unbindControllerLoop()
+        if not controllerBound then return end
+        RunService:UnbindFromRenderStep("LightRaceCam")
+        controllerBound = false
+end
 
 CamEvt.Event:Connect(function(payload)
-	if not payload or not payload.type then return end
+        if not payload or not payload.type then return end
         if payload.type == "start" then
+                unbindControllerLoop()
                 cineActive = true
                 -- laat de cinematic vrij schrijven zonder dat CamGuard het direct terugzet
                 lastDesiredCF = nil
                 lastDesiredFOV = nil
                 reapplyBudgetThisFrame = 0
-	elseif payload.type == "stop" then
-		cineActive = false
-		-- seed voor eerste chase-frame na cinematic
-		local cycle = nil
-		for _,m in ipairs(Workspace:GetChildren()) do
-			if m:IsA("Model") and m.Name == (player.Name .. "_Cycle") then cycle = m; break end
-		end
+        elseif payload.type == "stop" then
+                cineActive = false
+                -- seed voor eerste chase-frame na cinematic
+                local cycle = nil
+                for _,m in ipairs(Workspace:GetChildren()) do
+                        if m:IsA("Model") and m.Name == (player.Name .. "_Cycle") then cycle = m; break end
+                end
 		local pos, look, fov
 		if cycle and cycle.PrimaryPart then
 			local ppCF = cycle.PrimaryPart.CFrame
@@ -127,9 +143,10 @@ CamEvt.Event:Connect(function(payload)
 			look = snapPos + fwd*CHASE_LOOK_AHEAD + up*(CHASE_UP*0.6)
 			fov  = 70
 		end
-		pendingSnap = {pos = pos, look = look, fov = fov}
-		snapDelayFrames = 2
-	end
+                pendingSnap = {pos = pos, look = look, fov = fov}
+                snapDelayFrames = 2
+                bindControllerLoop()
+        end
 end)
 
 -- ===== Round flow (force FPV tijdens countdown) =====
@@ -420,8 +437,7 @@ local function renderLobby()
 end
 
 -- ===== Render loop (single writer) =====
-local PRIORITY_FINAL = 10^9
-RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, function(dt)
+renderStep = function(dt)
         -- CamGuard per-frame reset
         myWritesThisFrame = 0
         reasonsThisFrame = {}
@@ -483,6 +499,8 @@ RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, function(dt)
 	if extWritesThisFrame > 0 then
 		warn(("[CamGuard] External write(s) this frame: %d ; mine=%d (cine=%s lobby=%s snap=%s)")
 			:format(extWritesThisFrame, myWritesThisFrame, tostring(cineActive), tostring(not RoundActiveVal.Value), tostring(pendingSnap~=nil)))
-	end
-	extWritesThisFrame = 0
-end)
+        end
+        extWritesThisFrame = 0
+end
+
+bindControllerLoop()
