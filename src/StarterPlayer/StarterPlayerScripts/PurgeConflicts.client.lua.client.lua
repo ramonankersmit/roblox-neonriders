@@ -4,7 +4,6 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 local cam = workspace.CurrentCamera
@@ -38,9 +37,9 @@ local function safeDestroy(inst, why)
 end
 
 local function scanAndPurge(container, tag)
-	if not container then return end
-	for _,inst in ipairs(container:GetDescendants()) do
-		if isKillName(inst.Name) then
+        if not container then return end
+        for _,inst in ipairs(container:GetDescendants()) do
+                if isKillName(inst.Name) then
 			safeDestroy(inst, tag or "scan")
 		end
 	end
@@ -54,40 +53,23 @@ end
 
 -- 1) Eerste sweep zodra PlayerScripts/PlayerGui er zijn
 task.defer(function()
-	local ps = player:WaitForChild("PlayerScripts", 10)
-	local pg = player:WaitForChild("PlayerGui", 10)
+        local pg = player:WaitForChild("PlayerGui", 10)
 
-	-- Freecam & co in PlayerGui
-	scanAndPurge(pg, "PlayerGui initial")
+        -- Freecam & co in PlayerGui
+        scanAndPurge(pg, "PlayerGui initial")
 
-        -- Proxies in PlayerScripts
-        scanAndPurge(ps, "PlayerScripts initial")
-
-	-- 2) Blijf waken: als er later iets bijkomt, direct weggooien
-	if ps then
-		ps.ChildAdded:Connect(function(ch)
-                        if isKillName(ch.Name) then safeDestroy(ch, "PlayerScripts.ChildAdded") end
-                        -- ook subchildren voor eventuele nested proxies
-			ch.DescendantAdded:Connect(function(d)
-				if isKillName(d.Name) then safeDestroy(d, "PlayerScripts.DescendantAdded") end
-			end)
-		end)
-		ps.DescendantAdded:Connect(function(d)
-			if isKillName(d.Name) then safeDestroy(d, "PlayerScripts.DescendantAdded2") end
-		end)
-	end
-
-	if pg then
-		pg.ChildAdded:Connect(function(ch)
-			if isKillName(ch.Name) then safeDestroy(ch, "PlayerGui.ChildAdded") end
-			ch.DescendantAdded:Connect(function(d)
-				if isKillName(d.Name) then safeDestroy(d, "PlayerGui.DescendantAdded") end
-			end)
-		end)
-		pg.DescendantAdded:Connect(function(d)
-			if isKillName(d.Name) then safeDestroy(d, "PlayerGui.DescendantAdded2") end
-		end)
-	end
+        -- 2) Blijf waken: als er later iets bijkomt, direct weggooien
+        if pg then
+                pg.ChildAdded:Connect(function(ch)
+                        if isKillName(ch.Name) then safeDestroy(ch, "PlayerGui.ChildAdded") end
+                        ch.DescendantAdded:Connect(function(d)
+                                if isKillName(d.Name) then safeDestroy(d, "PlayerGui.DescendantAdded") end
+                        end)
+                end)
+                pg.DescendantAdded:Connect(function(d)
+                        if isKillName(d.Name) then safeDestroy(d, "PlayerGui.DescendantAdded2") end
+                end)
+        end
 end)
 
 -- 3) Camera hard locken op Scriptable (voorkomt Custom push)
