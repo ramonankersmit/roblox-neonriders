@@ -19,43 +19,104 @@ CAS:BindActionAtPriority("BlockJump", blockJump, false, 999999, Enum.KeyCode.Spa
 -- === Besturing ===
 local running = false
 local steer, leftDown, rightDown = 0, false, false
+local facingConn
+local seatChangedConn
+
+local function shouldLockFacing()
+	return running or RoundActive.Value == true
+end
+
+local function stopFacingLock()
+	if facingConn then
+		facingConn:Disconnect()
+		facingConn = nil
+	end
+end
+
+local function alignRootToSeat(seat, rootPart)
+	if not (seat and rootPart) then
+		return
+	end
+	local pos = rootPart.Position
+	rootPart.CFrame = CFrame.new(pos, pos + seat.CFrame.LookVector)
+end
+
+local function tryStartFacingLock()
+	if not shouldLockFacing() then
+		stopFacingLock()
+		return
+	end
+
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	local rootPart = humanoid and humanoid.RootPart
+	if not (humanoid and seat and rootPart) then
+		stopFacingLock()
+		return
+	end
+
+	alignRootToSeat(seat, rootPart)
+	stopFacingLock()
+	facingConn = RunService.RenderStepped:Connect(function()
+		if not shouldLockFacing() then
+			stopFacingLock()
+			return
+		end
+
+		local currentSeat = humanoid.SeatPart
+		local currentRoot = humanoid.RootPart
+		if not (currentSeat and currentRoot and currentSeat.Parent) then
+			stopFacingLock()
+			return
+		end
+
+		alignRootToSeat(currentSeat, currentRoot)
+	end)
+end
+
+local function watchHumanoid(humanoid)
+	if seatChangedConn then
+		seatChangedConn:Disconnect()
+		seatChangedConn = nil
+	end
+	if not humanoid then
+		return
+	end
+	seatChangedConn = humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+		if shouldLockFacing() then
+			tryStartFacingLock()
+		else
+			stopFacingLock()
+		end
+	end)
+end
+
+local function onCharacterAdded(char)
+	stopFacingLock()
+	local humanoid = char:WaitForChild("Humanoid", 5)
+	watchHumanoid(humanoid)
+	if shouldLockFacing() then
+		tryStartFacingLock()
+	end
+end
+
+if player.Character then
+	onCharacterAdded(player.Character)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+player.CharacterRemoving:Connect(function()
+	stopFacingLock()
+	if seatChangedConn then
+		seatChangedConn:Disconnect()
+		seatChangedConn = nil
+	end
+end)
 local useSnapTurns = false
 local SNAP_TURN_DEGREES = 45
 
 local steeringLabel
-local steerKeys = {
-	[Enum.KeyCode.A] = true,
-	[Enum.KeyCode.D] = true,
-	[Enum.KeyCode.Left] = true,
-	[Enum.KeyCode.Right] = true,
-}
-
-local function shouldLockSteering()
-	return running or (RoundActive.Value == true)
-end
-
-local function sinkSteeringInput(_, _, inputObject)
-	if not inputObject then
-		return Enum.ContextActionResult.Pass
-	end
-
-	if not steerKeys[inputObject.KeyCode] then
-		return Enum.ContextActionResult.Pass
-	end
-
-	if shouldLockSteering() then
-		return Enum.ContextActionResult.Sink
-	end
-
-	return Enum.ContextActionResult.Pass
-end
-
-CAS:BindActionAtPriority("LockCycleSteerKeys", sinkSteeringInput, false, 999999,
-	Enum.KeyCode.A,
-	Enum.KeyCode.D,
-	Enum.KeyCode.Left,
-	Enum.KeyCode.Right
-)
 
 local function getSteeringStatus()
 	if useSnapTurns then
@@ -154,8 +215,10 @@ updateSteeringStatus()
 RoundEvent.OnClientEvent:Connect(function(kind, val)
 	if kind == "countdown" then
 		label.Visible = true; label.Text = tostring(val); running = false
+		tryStartFacingLock()
 	elseif kind == "go" then
 		label.Text = "GO!"; running = true
+		tryStartFacingLock()
 		task.delay(0.6, function() if label then label.Visible = false end end)
 	end
 end)
@@ -166,5 +229,8 @@ RoundActive:GetPropertyChangedSignal("Value"):Connect(function()
 		running = false
 		leftDown, rightDown = false, false
 		steer = 0
+		stopFacingLock()
+	else
+		tryStartFacingLock()
 	end
 end)
