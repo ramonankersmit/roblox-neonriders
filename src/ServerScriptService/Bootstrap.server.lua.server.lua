@@ -66,11 +66,11 @@ if not ServerStorage:FindFirstChild("LightCycle") then
 	chassis.Material = Enum.Material.Metal; chassis.Color = Color3.fromRGB(0,170,255)
 	chassis.Anchored = true; chassis.Parent = model
 
-	-- Seat: 180° gedraaid zodat speler naar voren kijkt
-	local seat = Instance.new("Seat")
-	seat.Name = "Seat"; seat.Size = Vector3.new(2,1,2)
-	seat.Transparency = 1; seat.CanCollide = false; seat.Anchored = true; seat.Parent = model
-	seat.CFrame = chassis.CFrame * CFrame.new(0, 1.4, -0.4)
+        -- Seat: 180° gedraaid zodat speler naar voren kijkt
+        local seat = Instance.new("Seat")
+        seat.Name = "Seat"; seat.Size = Vector3.new(2,1,2)
+        seat.Transparency = 1; seat.CanCollide = false; seat.Anchored = true; seat.Parent = model
+        seat.CFrame = chassis.CFrame * CFrame.new(0, 1.4, -0.4) * CFrame.Angles(0, math.pi, 0)
 	local wSeat = Instance.new("WeldConstraint"); wSeat.Part0 = chassis; wSeat.Part1 = seat; wSeat.Parent = model
 
 	local glow = Instance.new("Part")
