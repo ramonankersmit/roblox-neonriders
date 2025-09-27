@@ -43,6 +43,13 @@ RunService.RenderStepped:Connect(function()
 end)
 
 local playerGui = player:WaitForChild("PlayerGui")
+do
+        local existingNames = {}
+        for _, child in ipairs(playerGui:GetChildren()) do
+                table.insert(existingNames, child.Name)
+        end
+        print("[ClientControls] mounting HUD block; PlayerGui children before:", #existingNames, table.concat(existingNames, ", "))
+end
 local gui = playerGui:FindFirstChild("SpeedHUD")
         or playerGui:FindFirstChild("DistanceHUD")
         or playerGui:FindFirstChild("HUD")

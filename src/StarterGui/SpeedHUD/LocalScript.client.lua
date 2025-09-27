@@ -8,9 +8,12 @@ local plr = Players.LocalPlayer
 
 local TIERS = {60, 80, 110}  -- toonwaarden; server valideert
 
+print("[SpeedHUD] script.Parent =", script.Parent, "Parent hierarchy =", script.Parent:GetFullName())
+
 -- Minimalistische HUD (gebruik de ScreenGui waarin dit script al zit)
 local gui = script.Parent :: ScreenGui
 gui.ResetOnSpawn = false
+print("[SpeedHUD] ResetOnSpawn:", gui.ResetOnSpawn)
 
 -- schoonmaken (laat alleen dit script staan)
 for _, child in ipairs(gui:GetChildren()) do

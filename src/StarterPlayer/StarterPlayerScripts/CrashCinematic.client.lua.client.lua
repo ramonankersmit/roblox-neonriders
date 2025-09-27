@@ -259,6 +259,7 @@ local function playCinematic(crashPos, yaw)
         local camConn
         local cleaned = false
         local cleanup -- forward declare
+        print("[CrashCinematic] Binding CrashCinematicCam renderstep")
         RunService:BindToRenderStep("CrashCinematicCam", Enum.RenderPriority.Camera.Value + 2, function(dt)
                 local scaledDt = math.clamp(dt, 0, 0.1) * timeScale
                 progress = math.clamp(progress + (scaledDt / DURATION), 0, 1)
@@ -294,7 +295,11 @@ local function playCinematic(crashPos, yaw)
                 if DEBUG then warn("[Cine] stop") end
 
                 -- stop onze renderloop
-                if camConn then RunService:UnbindFromRenderStep("CrashCinematicCam"); camConn = nil end
+                if camConn then
+                        print("[CrashCinematic] Unbinding CrashCinematicCam renderstep")
+                        RunService:UnbindFromRenderStep("CrashCinematicCam")
+                        camConn = nil
+                end
 
                 -- effectjes weg, FOV terug
                 if blur then blur:Destroy() end

@@ -93,12 +93,14 @@ local renderStep
 
 local function bindControllerLoop()
         if controllerBound or not renderStep then return end
+        print("[CameraController] Binding LightRaceCam; controllerBound=", controllerBound, "cineActive=", cineActive)
         RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, renderStep)
         controllerBound = true
 end
 
 local function unbindControllerLoop()
         if not controllerBound then return end
+        print("[CameraController] Unbinding LightRaceCam; controllerBound=", controllerBound, "cineActive=", cineActive)
         RunService:UnbindFromRenderStep("LightRaceCam")
         controllerBound = false
 end
