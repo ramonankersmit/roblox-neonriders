@@ -143,7 +143,8 @@ end
 -- ===== Manual toggles =====
 local useCockpitManual = false
 local controllerEnabled = true   -- K: toggelt onze writer
-local frontChase = true          -- F: wissel front/back chase (default AAN voor jouw test)
+local frontChase = false         -- F: wissel front/back chase (default: achtervolg-view)
+local resetSmoothing             -- forward declare zodat we 'm vanuit toggles kunnen aanroepen
 UIS.InputBegan:Connect(function(input, gp)
 	if gp then return end
 	if input.KeyCode == Enum.KeyCode.V then
@@ -151,10 +152,11 @@ UIS.InputBegan:Connect(function(input, gp)
 	elseif input.KeyCode == Enum.KeyCode.K then
 		controllerEnabled = not controllerEnabled
 		print("[CamGuard] controllerEnabled=", controllerEnabled)
-	elseif input.KeyCode == Enum.KeyCode.F then
-		frontChase = not frontChase
-		print("[Cam] chase mode =", frontChase and "FRONT" or "BACK")
-	end
+        elseif input.KeyCode == Enum.KeyCode.F then
+                frontChase = not frontChase
+                if resetSmoothing then resetSmoothing() end -- voorkom smoothing-blend tussen front/back
+                print("[Cam] chase mode =", frontChase and "FRONT" or "BACK")
+        end
 end)
 
 -- ===== Tuning =====
@@ -199,9 +201,9 @@ local smoothPos, smoothLook = nil, nil
 local lastCycle             = nil
 local clipArmed             = false
 
-local function resetSmoothing()
-	smoothPos, smoothLook = nil, nil
-	clipArmed = false
+resetSmoothing = function()
+        smoothPos, smoothLook = nil, nil
+        clipArmed = false
 end
 Players.LocalPlayer.CharacterAdded:Connect(resetSmoothing)
 RoundActiveVal:GetPropertyChangedSignal("Value"):Connect(resetSmoothing)
