@@ -172,7 +172,6 @@ local CHASE_LOOK_AHEAD, CHASE_FOV       = 14, 70
 local FRONT_AHEAD, FRONT_SIDE, FRONT_UP = 11.0, 0.0, 9.0
 -- Je kunt FRONT_SIDE bv. 1.5 zetten voor een schuin-front effect
 
-local SMOOTH_ALPHA_60FPS                = 0.6
 local ANTICLIP_PUSH                     = 0.6
 -- FPV
 local FPV_FOV, FPV_HEAD_BACK, FPV_AHEAD = 80, 0.12, 11
@@ -203,27 +202,11 @@ local function raycast_exclude(fromPos, toPos, exclude)
 end
 
 -- ===== State =====
-local smoothPos, smoothLook = nil, nil
-local lastCycle             = nil
-local clipArmed             = false
-local lastFrameDt           = 1 / 60
-
-local function smoothAlphaForDt(dt)
-        dt = dt or lastFrameDt
-        if dt <= 0 then
-                return 1
-        end
-
-        -- Converteer de gewenste 60 FPS alpha naar een tijdconstante en gebruik
-        -- die rechtstreeks. Zo blijft de filterrespons gelijk bij elke refresh,
-        -- maar kunnen hoge framerates toch een grotere alpha krijgen.
-        local base = math.clamp(1 - SMOOTH_ALPHA_60FPS, 1e-4, 0.9999)
-        local decay = -math.log(base) * 60
-        return math.clamp(1 - math.exp(-decay * math.min(dt, 1/15)), 0, 1)
-end
+local lastCycle   = nil
+local clipArmed   = false
+local lastFrameDt = 1 / 60
 
 resetSmoothing = function()
-        smoothPos, smoothLook = nil, nil
         clipArmed = false
         lastFrameDt = 1 / 60
 end
@@ -349,14 +332,7 @@ local function renderChase(cycle)
 		wantPos, wantLook = computeChaseBack(baseCF, cycle)
 	end
 
-        if not smoothPos then
-                smoothPos, smoothLook = wantPos, wantLook
-        else
-                local alpha = smoothAlphaForDt(lastFrameDt)
-                smoothPos  = smoothPos:Lerp(wantPos,  alpha)
-                smoothLook = smoothLook:Lerp(wantLook, alpha)
-        end
-        SetCam(CFrame.new(smoothPos, smoothLook), CHASE_FOV, frontChase and "chase_front" or "chase_back")
+        SetCam(CFrame.new(wantPos, wantLook), CHASE_FOV, frontChase and "chase_front" or "chase_back")
 end
 
 local function renderFPV(cycle)
