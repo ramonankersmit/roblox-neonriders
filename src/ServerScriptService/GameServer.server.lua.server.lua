@@ -25,7 +25,7 @@ local SpawnFolder    = Workspace:WaitForChild("SpawnPoints")
 local TICK_DT         = 1/30
 local TURN_RATE       = math.rad(140)
 local TURN_THRESH     = 0.20
-local SNAP_TURN       = math.rad(45)
+local SNAP_TURN       = math.rad(90)
 
 local WALL_THICK      = 0.2
 local WALL_HEIGHT     = 10

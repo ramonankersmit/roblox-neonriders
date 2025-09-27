@@ -20,6 +20,23 @@ CAS:BindActionAtPriority("BlockJump", blockJump, false, 999999, Enum.KeyCode.Spa
 local running = false
 local steer, leftDown, rightDown = 0, false, false
 local useSnapTurns = false
+local SNAP_TURN_DEGREES = 90
+
+local steeringLabel
+
+local function getSteeringStatus()
+	if useSnapTurns then
+		return string.format("Sturing: Haaks (%d°)", SNAP_TURN_DEGREES)
+	end
+	return "Sturing: Vrij (analoog)"
+end
+
+local function updateSteeringStatus()
+	if steeringLabel then
+		steeringLabel.Text = getSteeringStatus()
+	end
+end
+
 local function setSteer()
 	if leftDown and not rightDown then steer = -1
 	elseif rightDown and not leftDown then steer = 1
@@ -44,6 +61,7 @@ UIS.InputBegan:Connect(function(i,gp)
                         setSteer()
                 end
 
+                updateSteeringStatus()
                 if running then
                         TurnEvent:FireServer(0)
                 end
@@ -85,6 +103,20 @@ local label = Instance.new("TextLabel")
 label.Size = UDim2.fromScale(0.3, 0.2); label.Position = UDim2.fromScale(0.35, 0.3)
 label.BackgroundTransparency = 1; label.TextScaled = true; label.Font = Enum.Font.GothamBold
 label.TextColor3 = Color3.new(1,1,1); label.TextStrokeTransparency = 0.2; label.Visible = false; label.Parent = gui
+
+steeringLabel = Instance.new("TextLabel")
+steeringLabel.Name = "SteeringStatus"
+steeringLabel.Size = UDim2.fromScale(0.24, 0.06)
+steeringLabel.Position = UDim2.fromScale(0.04, 0.88)
+steeringLabel.BackgroundTransparency = 1
+steeringLabel.TextXAlignment = Enum.TextXAlignment.Left
+steeringLabel.TextYAlignment = Enum.TextYAlignment.Center
+steeringLabel.Font = Enum.Font.Gotham
+steeringLabel.TextSize = 24
+steeringLabel.TextColor3 = Color3.new(1,1,1)
+steeringLabel.TextStrokeTransparency = 0.3
+steeringLabel.Parent = gui
+updateSteeringStatus()
 
 RoundEvent.OnClientEvent:Connect(function(kind, val)
 	if kind == "countdown" then
