@@ -18,25 +18,19 @@ UIS.InputEnded:Connect(function(i,g) if g then return end; for k,code in pairs(k
 RunService.RenderStepped:Connect(function()
         if not canControlHumanoid() then return end
         local char=plr.Character; local hum=char and char:FindFirstChildOfClass("Humanoid"); if not hum then return end
-        local camera = workspace.CurrentCamera
-        if not camera then return end
+        if not workspace.CurrentCamera then return end
 
-        local camCFrame = camera.CFrame
-        local forward = Vector3.new(camCFrame.LookVector.X, 0, camCFrame.LookVector.Z)
-        local right = Vector3.new(camCFrame.RightVector.X, 0, camCFrame.RightVector.Z)
+        local x = 0
+        if down.D then x += 1 end
+        if down.A then x -= 1 end
 
-        if forward.Magnitude == 0 or right.Magnitude == 0 then return end
-        forward = forward.Unit
-        right = right.Unit
+        local z = 0
+        if down.S then z += 1 end
+        if down.W then z -= 1 end
 
-        local v = Vector3.zero
-        if down.W then v += forward end
-        if down.S then v -= forward end
-        if down.A then v -= right   end
-        if down.D then v += right   end
-
-        if v.Magnitude > 0 then
-                hum:Move(v.Unit, false)
+        local move = Vector3.new(x, 0, z)
+        if move.Magnitude > 0 then
+                hum:Move(move.Unit, true)
         else
                 hum:Move(Vector3.zero, false)
         end
