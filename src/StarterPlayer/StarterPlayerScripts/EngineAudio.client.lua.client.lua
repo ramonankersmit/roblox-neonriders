@@ -5,7 +5,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local ENGINE_SOUND_ID = "rbxassetid://1843523065"
+local ENGINE_SOUND_ID = "rbxassetid://12221967"
 local MIN_PITCH = 0.7
 local MAX_PITCH = 1.55
 local MIN_VOLUME = 0.05

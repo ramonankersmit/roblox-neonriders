@@ -29,7 +29,7 @@ local CrashEvent = RS:WaitForChild("CrashEvent")
 
 -- ===== Debug =====
 local DEBUG = true
-local CRASH_SOUND_ID = "rbxassetid://138087417"
+local CRASH_SOUND_ID = "rbxassetid://12221917"
 local function marker(pos, color, sz, t)
 	if not DEBUG then return end
 	local p = Instance.new("Part")
