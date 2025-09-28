@@ -1,307 +1,137 @@
+-- File: ServerScriptService/VehicleController.server.lua
+-- Stuurt voertuigen op basis van VehicleSeat .Throttle/.Steer of (fallback) Remotes.VehicleInput.
+-- Fixes:
+--  - Network ownership correct (geen anchored assembly)
+--  - Geen "OnServerEvent ontbreekt" meer
+
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 
-local remotes = RS:FindFirstChild("Remotes") or RS:WaitForChild("Remotes", 5)
-local vehicleInput = remotes and (remotes:FindFirstChild("VehicleInput") or remotes:WaitForChild("VehicleInput", 5))
+-- ===== afstelbare constants =====
+local FWD_SPEED    = 80    -- basis snelheid vooruit/achteruit
+local TURN_FACTOR  = 2     -- draaikracht
+local UNANCHOR_ON_DRIVE = true
 
-if not remotes then
-	warn("[VehicleController] Remotes ontbreekt")
-elseif not vehicleInput then
-	warn("[VehicleController] VehicleInput ontbreekt")
-end
+-- ===== state =====
+local seatByPlayer = {}      -- [player] = Seat/VehicleSeat
+local vehicleByPlayer = {}   -- [player] = Model
 
-local FWD_SPEED = 60
-local TURN_RATE = 2
-
-local function cleanupExternalWelds(model)
-	if not model then
-		return
-	end
-
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("WeldConstraint") then
-			local part0, part1 = descendant.Part0, descendant.Part1
-			if (part0 and not model:IsAncestorOf(part0)) or (part1 and not model:IsAncestorOf(part1)) then
-				descendant.Enabled = false
+-- ===== helpers =====
+local function getVehicleModelFromSeat(seat: Instance): Model?
+	if not seat then return nil end
+	local model = seat:FindFirstAncestorOfClass("Model")
+	if not model then return nil end
+	if not model.PrimaryPart then
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				model.PrimaryPart = d
+				break
 			end
 		end
 	end
+	return model
 end
 
-local function unanchorAssembly(model)
-	if not model then
-		return
-	end
-
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			descendant.Anchored = false
+local function unanchorAssembly(model: Model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = false
 		end
 	end
 end
 
-local function getRootPart(model, seat)
-	if not model then
-		return nil
-	end
-
+local function setOwner(model: Model, plr: Player?)
+	if not model or not model.PrimaryPart then return end
 	local root = model.PrimaryPart
-	if root and root:IsA("BasePart") then
-		return root
-	end
-
-	if seat and seat:IsA("BasePart") then
-		return seat
-	end
-
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			return descendant
-		end
-	end
-
-	return nil
-end
-
-local activeSeats = {}
-local trackedSeats = {}
-
-local function applyInput(root, throttle, steer)
-	if not root then
-		return
-	end
-
-	if typeof(throttle) ~= "number" then
-		throttle = tonumber(throttle) or 0
-	end
-
-	if typeof(steer) ~= "number" then
-		steer = tonumber(steer) or 0
-	end
-
-	throttle = math.clamp(throttle, -1, 1)
-	steer = math.clamp(steer, -1, 1)
-
-	local currentVelocity = root.AssemblyLinearVelocity
-	local forward = root.CFrame.LookVector * (FWD_SPEED * throttle)
-	root.AssemblyLinearVelocity = Vector3.new(forward.X, currentVelocity.Y, forward.Z)
-
-	local mass = root.AssemblyMass
-	if mass > 0 then
-		root:ApplyAngularImpulse(Vector3.new(0, steer * TURN_RATE * mass, 0))
-	end
-end
-
-local function deactivateSeat(seat, clearOwner)
-	local state = activeSeats[seat]
-	if not state then
-		return
-	end
-
-	if clearOwner and state.root and state.root.Parent then
-		local success, err = pcall(function()
-			state.root:SetNetworkOwner(nil)
-		end)
-		if not success then
-			warn("[VehicleController] Failed to clear network owner: ", err)
-		end
-	end
-
-	activeSeats[seat] = nil
-end
-
-local function activateSeat(seat, player)
-	if not seat or not player then
-		return
-	end
-
-	local vehicle = seat:FindFirstAncestorOfClass("Model")
-	if not vehicle then
-		return
-	end
-
-	local root = getRootPart(vehicle, seat)
-	if not root then
-		return
-	end
-
-	local state = activeSeats[seat]
-	if not state then
-		state = {}
-		activeSeats[seat] = state
-	end
-
-	state.player = player
-	state.vehicle = vehicle
-	state.root = root
-	state.usesVehicleSeat = seat:IsA("VehicleSeat")
-
-	if state.usesVehicleSeat then
-		state.throttle = seat.Throttle
-		state.steer = seat.Steer
-	else
-		state.throttle = 0
-		state.steer = 0
-	end
-
-	cleanupExternalWelds(vehicle)
-	unanchorAssembly(vehicle)
-
 	if root.CanSetNetworkOwnership then
-		local canSet, reason = root:CanSetNetworkOwnership()
-		if not canSet then
-			warn("[VehicleController] CanSetNetworkOwnership=false: ", reason)
+		root:SetNetworkOwner(plr) -- nil => server
+	end
+end
+
+local function applyVehiclePhysics(model: Model, throttle: number, steer: number)
+	if not model or not model.PrimaryPart then return end
+	local root = model.PrimaryPart
+
+	-- Vooruit langs LookVector
+	local v = root.CFrame.LookVector * (FWD_SPEED * throttle)
+	root.AssemblyLinearVelocity = Vector3.new(v.X, root.AssemblyLinearVelocity.Y, v.Z)
+
+	-- Y-yaw
+	local yaw = steer * TURN_FACTOR * root.AssemblyMass
+	root:ApplyAngularImpulse(Vector3.new(0, yaw, 0))
+end
+
+local function beginDriving(plr: Player, seat: Instance)
+	local vehicle = getVehicleModelFromSeat(seat)
+	if not vehicle then return end
+	seatByPlayer[plr] = seat
+	vehicleByPlayer[plr] = vehicle
+
+	if UNANCHOR_ON_DRIVE then
+		unanchorAssembly(vehicle)  -- eigenaarschap kan NIET op geankerde (of aan anchored gelaste) assemblies. :contentReference[oaicite:1]{index=1}
+	end
+	setOwner(vehicle, plr)
+end
+
+local function endDriving(plr: Player)
+	local vehicle = vehicleByPlayer[plr]
+	if vehicle then setOwner(vehicle, nil) end
+	seatByPlayer[plr] = nil
+	vehicleByPlayer[plr] = nil
+end
+
+-- ===== Seat/VehicleSeat detecteren voor alle seats in de game =====
+local function attachSeat(seat: Seat)
+	seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+		local hum = seat.Occupant
+		if hum and hum.Parent then
+			local plr = Players:GetPlayerFromCharacter(hum.Parent)
+			if plr then beginDriving(plr, seat) end
 		else
-			local currentOwner = root:GetNetworkOwner()
-			if currentOwner ~= player then
-				root:SetNetworkOwner(player)
+			-- bestuurder weg
+			for plr, s in pairs(seatByPlayer) do
+				if s == seat then endDriving(plr) end
 			end
 		end
-	end
-end
+	end)
 
-local function updateSeatInputFromSeat(seat)
-	local state = activeSeats[seat]
-	if not state or not state.usesVehicleSeat then
-		return
-	end
-
-	state.throttle = math.clamp(seat.Throttle or 0, -1, 1)
-	state.steer = math.clamp(seat.Steer or 0, -1, 1)
-end
-
-local function handleOccupantChanged(seat)
-	local occupant = seat.Occupant
-	if occupant and occupant.Parent then
-		local player = Players:GetPlayerFromCharacter(occupant.Parent)
-		if player then
-			activateSeat(seat, player)
-			if seat:IsA("VehicleSeat") then
-				updateSeatInputFromSeat(seat)
-			end
-			return
-		end
-	end
-
-	deactivateSeat(seat, true)
-end
-
-local function resolveSeatForPlayer(player)
-	local character = player.Character
-	if not character then
-		return nil
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		return nil
-	end
-
-	local seatPart = humanoid.SeatPart
-	if not seatPart or seatPart.Occupant ~= humanoid then
-		return nil
-	end
-
-	return seatPart
-end
-
-local function updateSeatInputFromRemote(player, throttle, steer)
-	local seat = resolveSeatForPlayer(player)
-	if not seat or seat:IsA("VehicleSeat") then
-		return
-	end
-
-	throttle = tonumber(throttle) or 0
-	steer = tonumber(steer) or 0
-
-	throttle = math.clamp(throttle, -1, 1)
-	steer = math.clamp(steer, -1, 1)
-
-	local state = activeSeats[seat]
-	if not state or state.player ~= player then
-		activateSeat(seat, player)
-		state = activeSeats[seat]
-	end
-
-	if not state then
-		return
-	end
-
-	state.throttle = throttle
-	state.steer = steer
-end
-
-local function disconnectSeat(seat)
-	local tracked = trackedSeats[seat]
-	if tracked then
-		for _, connection in ipairs(tracked.connections) do
-			connection:Disconnect()
-		end
-	end
-	trackedSeats[seat] = nil
-	deactivateSeat(seat, true)
-end
-
-local function trackSeat(seat)
-	if trackedSeats[seat] then
-		return
-	end
-
-	local tracked = {
-		connections = {}
-	}
-	trackedSeats[seat] = tracked
-
-	local function onOccupantChanged()
-		handleOccupantChanged(seat)
-	end
-
-	tracked.connections[#tracked.connections + 1] = seat:GetPropertyChangedSignal("Occupant"):Connect(onOccupantChanged)
-
+	-- Als het een VehicleSeat is, lees direct Throttle/Steer (WASD wordt automatisch doorgegeven). :contentReference[oaicite:2]{index=2}
 	if seat:IsA("VehicleSeat") then
-		local function onInputChanged()
-			updateSeatInputFromSeat(seat)
-		end
-
-		tracked.connections[#tracked.connections + 1] = seat:GetPropertyChangedSignal("Throttle"):Connect(onInputChanged)
-		tracked.connections[#tracked.connections + 1] = seat:GetPropertyChangedSignal("Steer"):Connect(onInputChanged)
-	end
-
-	tracked.connections[#tracked.connections + 1] = seat.AncestryChanged:Connect(function(_, parent)
-		if not parent then
-			disconnectSeat(seat)
-		end
-	end)
-
-	onOccupantChanged()
-end
-
-for _, descendant in ipairs(Workspace:GetDescendants()) do
-	if descendant:IsA("Seat") or descendant:IsA("VehicleSeat") then
-		trackSeat(descendant)
+		seat:GetPropertyChangedSignal("Throttle"):Connect(function()
+			local model = getVehicleModelFromSeat(seat)
+			if model then applyVehiclePhysics(model, seat.Throttle, seat.Steer) end
+		end)
+		seat:GetPropertyChangedSignal("Steer"):Connect(function()
+			local model = getVehicleModelFromSeat(seat)
+			if model then applyVehiclePhysics(model, seat.Throttle, seat.Steer) end
+		end)
 	end
 end
 
-Workspace.DescendantAdded:Connect(function(descendant)
-	if descendant:IsA("Seat") or descendant:IsA("VehicleSeat") then
-		trackSeat(descendant)
-	end
+for _, inst in ipairs(workspace:GetDescendants()) do
+	if inst:IsA("Seat") then attachSeat(inst) end
+end
+workspace.DescendantAdded:Connect(function(inst)
+	if inst:IsA("Seat") then attachSeat(inst) end
 end)
 
-RunService.Heartbeat:Connect(function()
-	for seat, state in pairs(activeSeats) do
-		if not seat.Parent or not state.root or not state.root.Parent then
-			deactivateSeat(seat, true)
-		else
-			applyInput(state.root, state.throttle or 0, state.steer or 0)
+-- ===== Fallback: als een client toch Remotes.VehicleInput vuruurt, verwerk 'm hier =====
+local remotes = RS:WaitForChild("Remotes")
+local VehicleInput = remotes:WaitForChild("VehicleInput") -- server handler voorkomt je queue-spam. :contentReference[oaicite:3]{index=3}
+
+VehicleInput.OnServerEvent:Connect(function(plr, throttle: number, steer: number)
+	local vehicle = vehicleByPlayer[plr]
+	-- Als mapping ontbreekt, probeer de huidige seat van deze speler te vinden
+	if not vehicle then
+		local char = plr.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local seat = hum and hum.SeatPart
+		if seat then
+			beginDriving(plr, seat)
+			vehicle = vehicleByPlayer[plr]
 		end
 	end
+	if vehicle then
+		applyVehiclePhysics(vehicle, throttle or 0, steer or 0)
+	end
 end)
-
-if vehicleInput then
-	vehicleInput.OnServerEvent:Connect(function(player, throttle, steer)
-		updateSeatInputFromRemote(player, throttle, steer)
-	end)
-end

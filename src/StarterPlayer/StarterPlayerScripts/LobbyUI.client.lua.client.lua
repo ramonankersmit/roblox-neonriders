@@ -49,8 +49,8 @@ end)
 local UIS = game:GetService("UserInputService")
 UIS.InputBegan:Connect(function(i,gp)
 	if gp then return end
-	if i.KeyCode == Enum.KeyCode.E then btnReady:Activate() end
-	if i.KeyCode == Enum.KeyCode.Y then btnStart:Activate() end
+	if i.KeyCode == Enum.KeyCode.E then btnReady:Activated() end
+	if i.KeyCode == Enum.KeyCode.Y then btnStart:Activated() end
 end)
 
 LobbyEvent.OnClientEvent:Connect(function(payload)

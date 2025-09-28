@@ -1,15 +1,12 @@
+-- File: ServerScriptService/ReplicatedRemotes.server.lua
+-- Zorgt dat ReplicatedStorage.Remotes.VehicleInput bestaat (voorkomt je "OnServerEvent?" spam).
 local RS = game:GetService("ReplicatedStorage")
-
-local remotes = RS:FindFirstChild("Remotes")
-if not remotes then
-	remotes = Instance.new("Folder")
-	remotes.Name = "Remotes"
-	remotes.Parent = RS
+local rem = RS:FindFirstChild("Remotes") or Instance.new("Folder")
+rem.Name = "Remotes"; rem.Parent = RS
+if not rem:FindFirstChild("VehicleInput") then
+	local ev = Instance.new("RemoteEvent")
+	ev.Name = "VehicleInput"
+	ev.Parent = rem
 end
-
-local vehicleInput = remotes:FindFirstChild("VehicleInput")
-if not vehicleInput then
-	vehicleInput = Instance.new("RemoteEvent")
-	vehicleInput.Name = "VehicleInput"
-	vehicleInput.Parent = remotes
-end
+-- Optionele no-op handler zodat clientcalls nooit in de wachtrij blijven hangen:
+rem.VehicleInput.OnServerEvent:Connect(function() end)  -- stilhouden
