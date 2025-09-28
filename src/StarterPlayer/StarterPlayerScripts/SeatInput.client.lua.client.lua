@@ -6,15 +6,13 @@ local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 
 local remotes = RS:FindFirstChild("Remotes") or RS:WaitForChild("Remotes", 5)
+local vehicleInput = remotes and (remotes:FindFirstChild("VehicleInput") or remotes:WaitForChild("VehicleInput", 5))
+local remoteWarningShown = false
+
 if not remotes then
 	warn("[SeatInput] Remotes folder ontbreekt")
-	return
-end
-
-local vehicleInput = remotes:FindFirstChild("VehicleInput") or remotes:WaitForChild("VehicleInput", 5)
-if not vehicleInput then
+elseif not vehicleInput then
 	warn("[SeatInput] VehicleInput ontbreekt")
-	return
 end
 
 local controls do
@@ -34,9 +32,30 @@ local throttle = 0
 local steer = 0
 local renderConnection
 
+local function ensureVehicleInput()
+	if vehicleInput then
+		return vehicleInput
+	end
+
+	local remotesFolder = RS:FindFirstChild("Remotes")
+	if remotesFolder then
+		vehicleInput = remotesFolder:FindFirstChild("VehicleInput")
+	end
+
+	if not vehicleInput and not remoteWarningShown then
+		remoteWarningShown = true
+		warn("[SeatInput] VehicleInput ontbreekt")
+	end
+
+	return vehicleInput
+end
+
 local function sendInput()
 	if driving then
-		vehicleInput:FireServer(throttle, steer)
+		local remote = ensureVehicleInput()
+		if remote then
+			remote:FireServer(throttle, steer)
+		end
 	end
 end
 
@@ -61,6 +80,11 @@ end
 
 local function bindDriving()
 	if driving then
+		return
+	end
+
+	local remote = ensureVehicleInput()
+	if not remote then
 		return
 	end
 
@@ -95,7 +119,10 @@ local function unbindDriving()
 		controls:Enable()
 	end
 
-	vehicleInput:FireServer(0, 0)
+	local remote = ensureVehicleInput()
+	if remote then
+		remote:FireServer(0, 0)
+	end
 end
 
 local function handleSeatChange(humanoid)
@@ -103,7 +130,12 @@ local function handleSeatChange(humanoid)
 		if isSeated and seatPart and (seatPart:IsA("Seat") or seatPart:IsA("VehicleSeat")) then
 			humanoid.AutoRotate = false
 			humanoid.Sit = true
-			bindDriving()
+
+			if seatPart:IsA("VehicleSeat") then
+				unbindDriving()
+			else
+				bindDriving()
+			end
 		else
 			humanoid.AutoRotate = true
 			unbindDriving()
