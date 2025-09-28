@@ -67,11 +67,36 @@ VEHICLE_INPUT.OnServerEvent:Connect(function(player, throttle, steer)
 		return
 	end
 
-	local root = vehicle.PrimaryPart or seatPart
-	if root and root.CanSetNetworkOwnership then
-		local currentOwner = root:GetNetworkOwner()
-		if currentOwner ~= player then
-			root:SetNetworkOwner(player)
+	local model = vehicle
+	local root = (model and model.PrimaryPart) or seatPart
+	if not root then
+		return
+	end
+
+	if root.CanSetNetworkOwnership then
+		for _, descendant in ipairs(model:GetDescendants()) do
+			if descendant:IsA("WeldConstraint") then
+				local part0, part1 = descendant.Part0, descendant.Part1
+				if (part0 and not model:IsAncestorOf(part0)) or (part1 and not model:IsAncestorOf(part1)) then
+					descendant.Enabled = false
+				end
+			end
+		end
+
+		for _, descendant in ipairs(model:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = false
+			end
+		end
+
+		local canSet, reason = root:CanSetNetworkOwnership()
+		if not canSet then
+			warn("[VehicleController] CanSetNetworkOwnership=false: ", reason)
+		else
+			local currentOwner = root:GetNetworkOwner()
+			if currentOwner ~= player then
+				root:SetNetworkOwner(player)
+			end
 		end
 	end
 
