@@ -29,6 +29,7 @@ local CrashEvent = RS:WaitForChild("CrashEvent")
 
 -- ===== Debug =====
 local DEBUG = true
+local CRASH_SOUND_ID = "rbxassetid://12221917"
 local function marker(pos, color, sz, t)
 	if not DEBUG then return end
 	local p = Instance.new("Part")
@@ -38,6 +39,19 @@ local function marker(pos, color, sz, t)
 	p.CFrame = CFrame.new(pos)
 	p.Parent = Workspace
 	Debris:AddItem(p, t or 2)
+end
+
+local function playCrashSound()
+	if not (CRASH_SOUND_ID and #CRASH_SOUND_ID > 0) then return end
+	local sound = Instance.new("Sound")
+	sound.Name = "CrashImpact"
+	sound.SoundId = CRASH_SOUND_ID
+	sound.Volume = 0.85
+	sound.RollOffMode = Enum.RollOffMode.Linear
+	sound.RollOffMaxDistance = 240
+	sound.Parent = SoundService
+	SoundService:PlayLocalSound(sound)
+	Debris:AddItem(sound, (sound.TimeLength > 0) and (sound.TimeLength + 0.5) or 3)
 end
 
 -- ===== Tuning =====
@@ -370,6 +384,7 @@ CrashEvent.OnClientEvent:Connect(function(payload)
 	local cycleModel = payload.cycle
 
 	marker(pos, Color3.fromRGB(0,255,0), 1.25, 2) -- toon crash plek
+	playCrashSound()
 	playCinematic(pos, yaw)
 
 	-- visuals

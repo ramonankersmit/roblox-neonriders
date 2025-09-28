@@ -80,5 +80,14 @@ if not ServerStorage:FindFirstChild("LightCycle") then
 	local wGlow = Instance.new("WeldConstraint"); wGlow.Part0 = chassis; wGlow.Part1 = glow; wGlow.Parent = model
 	glow.Position = chassis.Position + Vector3.new(0,1.3,0)
 
-	model.PrimaryPart = chassis; model.Parent = ServerStorage
+local engineSound = Instance.new("Sound")
+engineSound.Name = "EngineSound"
+engineSound.SoundId = "rbxassetid://12221967"
+        engineSound.Looped = true
+        engineSound.Volume = 0.05
+        engineSound.RollOffMode = Enum.RollOffMode.Linear
+        engineSound.RollOffMaxDistance = 220
+        engineSound.Parent = chassis
+
+        model.PrimaryPart = chassis; model.Parent = ServerStorage
 end
