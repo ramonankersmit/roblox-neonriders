@@ -1,6 +1,16 @@
 local RS = game:GetService("ReplicatedStorage")
-local REMOTES = RS:WaitForChild("Remotes")
-local VEHICLE_INPUT = REMOTES:WaitForChild("VehicleInput")
+
+local REMOTES = RS:FindFirstChild("Remotes") or RS:WaitForChild("Remotes", 5)
+if not REMOTES then
+	warn("[VehicleController] Remotes ontbreekt")
+	return
+end
+
+local VEHICLE_INPUT = REMOTES:FindFirstChild("VehicleInput") or REMOTES:WaitForChild("VehicleInput", 5)
+if not VEHICLE_INPUT then
+	warn("[VehicleController] VehicleInput ontbreekt")
+	return
+end
 
 local FWD_SPEED = 60
 local TURN_RATE = 2

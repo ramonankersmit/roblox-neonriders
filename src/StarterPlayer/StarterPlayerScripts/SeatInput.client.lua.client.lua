@@ -4,8 +4,18 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
-local remotes = RS:WaitForChild("Remotes")
-local vehicleInput = remotes:WaitForChild("VehicleInput")
+
+local remotes = RS:FindFirstChild("Remotes") or RS:WaitForChild("Remotes", 5)
+if not remotes then
+	warn("[SeatInput] Remotes folder ontbreekt")
+	return
+end
+
+local vehicleInput = remotes:FindFirstChild("VehicleInput") or remotes:WaitForChild("VehicleInput", 5)
+if not vehicleInput then
+	warn("[SeatInput] VehicleInput ontbreekt")
+	return
+end
 
 local controls do
 	local playerModule = localPlayer:WaitForChild("PlayerScripts"):FindFirstChild("PlayerModule")
