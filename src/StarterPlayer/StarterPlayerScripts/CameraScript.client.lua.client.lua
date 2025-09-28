@@ -50,14 +50,13 @@ local cineActive       = false
 local pendingSnap      = nil -- {pos=Vector3, look=Vector3, fov=number}
 local snapDelayFrames  = 0   -- wacht x frames voor we de snap zetten (tegen dubbele writes)
 local controllerBound  = false
-local PRIORITY_FINAL   = Enum.RenderPriority.Last.Value
-local renderStep
+local onRender
 
 local function bindControllerLoop()
-        if controllerBound or not renderStep then return end
-        print("[CameraController] Binding LightRaceCam; controllerBound=", controllerBound, "cineActive=", cineActive)
-        RunService:BindToRenderStep("LightRaceCam", PRIORITY_FINAL, renderStep)
-        controllerBound = true
+	if controllerBound or not onRender then return end
+	print("[CameraController] Binding LightRaceCam; controllerBound=", controllerBound, "cineActive=", cineActive)
+	RunService:BindToRenderStep("LightRaceCam", Enum.RenderPriority.Last.Value, onRender)
+	controllerBound = true
 end
 
 local function unbindControllerLoop()
@@ -307,15 +306,15 @@ local function renderLobby()
 end
 
 -- ===== Render loop (single writer) =====
-renderStep = function(_dt)
-        if not controllerEnabled then return end
-        if cineActive then return end
+onRender = function(_dt)
+	if workspace.CurrentCamera.CameraType ~= Enum.CameraType.Scriptable then
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+	end
 
-        if cam.CameraType ~= Enum.CameraType.Scriptable then
-                cam.CameraType = Enum.CameraType.Scriptable
-        end
+	if not controllerEnabled then return end
+	if cineActive then return end
 
-        if pendingSnap then
+	if pendingSnap then
                 if snapDelayFrames > 0 then
                         snapDelayFrames -= 1
                         return
